@@ -9,14 +9,12 @@ use std::{
 
 use crate::utils::{FieldAccessor, Filter, Tokenizer};
 
-
 /**
 Index data structure.
 
 This data structure is optimized for memory consumption and performant mutations during indexing, so it contains only
 basic information.
-
- * @typeparam T Document key.
+ * typeparam `T` Document key.
  */
 pub struct Index<T> {
     /// Additional information about documents.
@@ -60,7 +58,7 @@ pub struct DocumentDetails<T> {
 /**
 Document pointer contains information about term frequency for a document.
 * typeparam `T` Document key.
- */
+*/
 #[derive(Clone, Debug, PartialEq)]
 pub struct DocumentPointer<T> {
     /**
@@ -159,8 +157,7 @@ pub fn find_inverted_index_node<T>(
 
 /**
 Finds inverted index child node with matching `char`.
-
-* typeparam `T` Document key.
+ * typeparam `T` Document key.
  * `node` InvertedIndexNode.
  * `charCode` Char code.
 returns Matching InvertedIndexNode or `undefined`.
@@ -190,8 +187,7 @@ fn find_inverted_index_node_child_nodes_by_char_code<T>(
 }
 
 /**
- * Adds inverted index child node.
- *
+Adds inverted index child node.
  * typeparam `T` Document key.
  * `parent` Parent node.
  * `child` Child node to add.
@@ -233,9 +229,9 @@ fn add_inverted_index_doc<T: Clone>(
 
 /**
 Adds a document to the index.
-* typeparam `T` Document key.
-* `node` Inverted index node.
-* `doc` Posting.
+ * typeparam `T` Document key.
+ * `node` Inverted index node.
+ * `doc` Posting.
 */
 
 pub fn add_document_to_index<T: Eq + Hash + Copy, D>(
@@ -334,7 +330,7 @@ Creates inverted index nodes for the `term` starting from the `start` character.
  * `term` Term.
  * `start` First char code position in the `term`.
  * returns leaf InvertedIndexNode.
- 
+
  */
 fn create_inverted_index_nodes<'a, T: Clone>(
     mut parent: Rc<RefCell<InvertedIndexNode<T>>>,
@@ -365,7 +361,7 @@ fn create_inverted_index_nodes<'a, T: Clone>(
  * `index` Index.
  * `removed` Set of removed document ids.
  * `key` Document key.
- */
+*/
 pub fn remove_document_from_index<T: Hash + Eq + Copy>(
     index: &mut Index<T>,
     removed: &mut HashSet<T>,
@@ -401,8 +397,7 @@ pub fn remove_document_from_index<T: Hash + Eq + Copy>(
 }
 
 /**
-* Cleans up removed documents from the {@link Index}.
-
+Cleans up removed documents from the {@link Index}.
 */
 pub fn vacuum_index<T: Hash + Eq>(index: &Index<T>, removed: &mut HashSet<T>) {
     vacuum_node(Rc::clone(&index.root), removed);
@@ -410,12 +405,11 @@ pub fn vacuum_index<T: Hash + Eq>(index: &Index<T>, removed: &mut HashSet<T>) {
 }
 
 /**
- * Recursively cleans up removed documents from the index.
-
+Recursively cleans up removed documents from the index.
  * `T` Document key.
  * `index` Index.
  * `removed` Set of removed document ids.
- */
+*/
 fn vacuum_node<T: Hash + Eq>(
     node: Rc<RefCell<InvertedIndexNode<T>>>,
     removed: &mut HashSet<T>,

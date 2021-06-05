@@ -2,7 +2,13 @@ use crate::{
     index::*,
     utils::{Filter, Tokenizer},
 };
-use std::{cell::RefCell, collections::{HashMap, HashSet}, fmt::Debug, hash::Hash, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+    hash::Hash,
+    rc::Rc,
+};
 
 /**
  * Query Result.
@@ -50,7 +56,7 @@ pub fn query<T: Eq + Hash + Clone + Debug>(
     let fields = &index.fields;
     let terms = tokenizer(&s);
     let mut scores: HashMap<T, f64> = HashMap::new();
-    
+
     for term_pre_filter in terms {
         let term = filter(&term_pre_filter);
         if term != "" {
@@ -134,22 +140,17 @@ pub fn query<T: Eq + Hash + Clone + Debug>(
                                     if score > 0_f64 {
                                         let key = &pointer_borrowed.details.borrow().key;
                                         let new_score = {
-                                            if let Some(prev_score) = scores.get(&key)
-                                            {
-                                                if visited_documents.contains(&key)
-                                                {
+                                            if let Some(prev_score) = scores.get(&key) {
+                                                if visited_documents.contains(&key) {
                                                     f64::max(prev_score.to_owned(), score)
-                                                }
-                                                else {
+                                                } else {
                                                     prev_score + score
                                                 }
-                                            }
-                                            else
-                                            {
+                                            } else {
                                                 score
                                             }
                                         };
-                                        scores.insert(key.to_owned(),new_score);
+                                        scores.insert(key.to_owned(), new_score);
                                         visited_documents.insert(key.to_owned());
                                     }
                                 }
@@ -178,7 +179,7 @@ Expands term with all possible combinations.
  * `term` Term.
 returns All terms that starts with `term` string.
  */
-fn expand_term<I:Debug>(index: &Index<I>, term: &String) -> Vec<String> {
+fn expand_term<I: Debug>(index: &Index<I>, term: &String) -> Vec<String> {
     let node = find_inverted_index_node(Rc::clone(&index.root), term);
     let mut results = Vec::new();
     if let Some(n) = node {
@@ -196,7 +197,7 @@ Recursively goes through inverted index nodes and expands term with all possible
  * `results Results.
  * `term Term.
  */
-fn expand_term_from_node<I:Debug>(
+fn expand_term_from_node<I: Debug>(
     node: Rc<RefCell<InvertedIndexNode<I>>>,
     results: &mut Vec<String>,
     term: &String,
@@ -337,14 +338,19 @@ mod tests {
                 approx_equal(result.get(0).unwrap().score, 0.1823215567939546, 8),
                 true
             );
-            assert_eq!(result.get(0).unwrap().key == 1 || result.get(0).unwrap().key  == 2 ,true);
+            assert_eq!(
+                result.get(0).unwrap().key == 1 || result.get(0).unwrap().key == 2,
+                true
+            );
             assert_eq!(
                 approx_equal(result.get(1).unwrap().score, 0.1823215567939546, 8),
                 true
             );
-            assert_eq!(result.get(1).unwrap().key == 1 || result.get(1).unwrap().key  == 2 ,true);
+            assert_eq!(
+                result.get(1).unwrap().key == 1 || result.get(1).unwrap().key == 2,
+                true
+            );
             assert_ne!(result.get(0).unwrap().key, result.get(1).unwrap().key);
-
         }
 
         #[test]
@@ -420,12 +426,10 @@ mod tests {
             }
 
             fn custom_filter(s: &String) -> String {
-                if s.as_str() == "a"
-                {
+                if s.as_str() == "a" {
                     return "".to_string();
                 }
                 filter(s)
-                
             }
             let result = query(
                 &mut idx,
@@ -439,7 +443,6 @@ mod tests {
             );
             assert_eq!(result.len(), 0);
         }
-
 
         #[test]
         fn it_should_use_token_separator_as_disjunction_operator() {
@@ -483,15 +486,20 @@ mod tests {
                 approx_equal(result.get(0).unwrap().score, 0.6931471805599453, 8),
                 true
             );
-            assert_eq!(result.get(0).unwrap().key == 1 || result.get(0).unwrap().key  == 2 ,true);
+            assert_eq!(
+                result.get(0).unwrap().key == 1 || result.get(0).unwrap().key == 2,
+                true
+            );
             assert_eq!(
                 approx_equal(result.get(1).unwrap().score, 0.6931471805599453, 8),
                 true
             );
-            assert_eq!(result.get(1).unwrap().key == 1 || result.get(1).unwrap().key  == 2 ,true);
+            assert_eq!(
+                result.get(1).unwrap().key == 1 || result.get(1).unwrap().key == 2,
+                true
+            );
             assert_ne!(result.get(0).unwrap().key, result.get(1).unwrap().key);
         }
-
     }
     pub mod expand {
         use super::*;
@@ -499,17 +507,16 @@ mod tests {
         #[test]
         fn it_should_expand_all() {
             let mut idx: Index<usize> = create_index(1);
-            let docs:Vec<Doc> = vec![
+            let docs: Vec<Doc> = vec![
                 Doc {
                     id: 1,
                     title: "abc".to_string(),
-                    text: "hello world".to_string()
-
+                    text: "hello world".to_string(),
                 },
                 Doc {
                     id: 2,
                     title: "adef".to_string(),
-                    text: "lorem ipsum".to_string()
+                    text: "lorem ipsum".to_string(),
                 },
             ];
 
@@ -524,9 +531,8 @@ mod tests {
                 );
             }
             let exp = expand_term(&idx, &"a".to_string());
-            assert_eq!(exp, vec!["adef".to_string(),"abc".to_string()]);
+            assert_eq!(exp, vec!["adef".to_string(), "abc".to_string()]);
         }
-
 
         #[test]
         fn it_should_not_expand() {
@@ -557,6 +563,5 @@ mod tests {
             let exp = expand_term(&idx, &"x".to_string());
             assert_eq!(exp, Vec::new() as Vec<String>);
         }
-       
     }
 }

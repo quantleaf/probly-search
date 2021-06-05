@@ -287,10 +287,7 @@ pub fn add_document_to_index<T: Eq + Hash + Copy, D>(
         }
     }
 
-    let details = Rc::new(RefCell::new(DocumentDetails {
-        key,
-        field_length,
-    }));
+    let details = Rc::new(RefCell::new(DocumentDetails { key, field_length }));
 
     docs.insert(key, Rc::clone(&details));
     for term in all_terms {

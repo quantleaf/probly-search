@@ -83,8 +83,8 @@ pub fn query<T: Eq + Hash + Clone + Debug>(
 
                         let mut pointer_option = Some(Rc::clone(term_node_option_first_doc));
                         while let Some(pointer) = pointer_option {
-                            if *&removed.is_some()
-                                && *&removed
+                            if removed.is_some()
+                                && removed
                                     .unwrap()
                                     .contains(&pointer.borrow().details.borrow().key)
                             {
@@ -113,8 +113,8 @@ pub fn query<T: Eq + Hash + Clone + Debug>(
                             while let Some(p) = pointer {
                                 let pointer_borrowed = p.borrow();
                                 let field_lengths = &pointer_borrowed.details.borrow().field_length;
-                                if *&removed.is_none()
-                                    || !*&removed
+                                if removed.is_none()
+                                    || !removed
                                         .unwrap()
                                         .contains(&pointer_borrowed.details.borrow().key)
                                 {
@@ -202,7 +202,7 @@ fn expand_term_from_node<I: Debug>(
     results: &mut Vec<String>,
     term: &String,
 ) {
-    if *&node.borrow().first_doc.is_some() {
+    if node.borrow().first_doc.is_some() {
         &results.push(term.to_owned());
     }
     let mut child = node.borrow().first_child.clone();

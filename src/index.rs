@@ -288,8 +288,8 @@ pub fn add_document_to_index<T: Eq + Hash + Copy, D>(
     }
 
     let details = Rc::new(RefCell::new(DocumentDetails {
-        key: key,
-        field_length: field_length,
+        key,
+        field_length,
     }));
 
     docs.insert(key, Rc::clone(&details));

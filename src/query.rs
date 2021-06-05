@@ -121,34 +121,14 @@ pub fn query<T: Eq + Hash + Clone + Debug, S: ScoreCalculator<T>>(
                                         .unwrap()
                                         .contains(&pointer_borrowed.details.borrow().key)
                                 {
-                                    /*let mut score: f64 = 0_f64;
-                                    for x in 0..field_lengths.len() {
-                                        let mut tf =
-                                            (&pointer_borrowed.term_frequency[x]).to_owned() as f64;
-                                        if tf > 0_f64 {
-                                            // calculating BM25 tf
-                                            let field_length = &field_lengths[x];
-                                            let field_details = &fields[x];
-                                            let avg_field_length = field_details.avg;
-                                            tf = ((bm25k1 + 1_f64) * tf)
-                                                / (bm25k1
-                                                    * ((1_f64 - bm25b)
-                                                        + bm25b
-                                                            * (field_length.to_owned() as f64
-                                                                / avg_field_length as f64))
-                                                    + tf);
-                                            score += tf * idf * fields_boost[x] * expansion_boost;
-                                        }
-                                    }*/
                                     let score = score_calculator.score(
-                                        Rc::clone(&p),
+                                        p.borrow(),
                                         idf,
                                         field_lengths,
                                         fields_boost,
                                         expansion_boost,
                                         fields,
                                     );
-
                                     if score > 0_f64 {
                                         let key = &pointer_borrowed.details.borrow().key;
                                         let new_score = {
@@ -166,8 +146,7 @@ pub fn query<T: Eq + Hash + Clone + Debug, S: ScoreCalculator<T>>(
                                         visited_documents.insert(key.to_owned());
                                     }
                                 }
-                                //  let q = &;
-                                pointer = pointer_borrowed.next.clone(); //Some(Rc::clone(&pointer.next));
+                                pointer = pointer_borrowed.next.clone();
                             }
                         }
                     }
@@ -268,6 +247,103 @@ mod tests {
         use super::*;
 
         #[test]
+        fn it_should_return_doc_1() {
+            let mut idx: Index<usize> = create_index(2);
+            let docs = vec![
+                Doc {
+                    id: 1,
+                    title: "a b c".to_string(),
+                    text: "hello world".to_string(),
+                },
+                Doc {
+                    id: 2,
+                    title: "c d e".to_string(),
+                    text: "lorem ipsum".to_string(),
+                },
+            ];
+            for doc in docs {
+                add_document_to_index(
+                    &mut idx,
+                    &[title_extract, text_extract],
+                    tokenizer,
+                    filter,
+                    doc.id,
+                    doc,
+                );
+            }
+            let result = query(
+                &mut idx,
+                &vec![1., 1.],
+                &score::default::bm25::default(),
+                tokenizer,
+                filter,
+                None,
+                &"a".to_string(),
+            );
+            assert_eq!(result.len(), 1);
+            assert_eq!(
+                approx_equal(result.get(0).unwrap().score, 0.6931471805599453, 8),
+                true
+            );
+            assert_eq!(result.get(0).unwrap().key, 1);
+        }
+
+        #[test]
+        fn it_should_return_doc_1_and_2() {
+            let mut idx: Index<usize> = create_index(2);
+            let docs = vec![
+                Doc {
+                    id: 1,
+                    title: "a b c".to_string(),
+                    text: "hello world".to_string(),
+                },
+                Doc {
+                    id: 2,
+                    title: "c d e".to_string(),
+                    text: "lorem ipsum".to_string(),
+                },
+            ];
+
+            for doc in docs {
+                add_document_to_index(
+                    &mut idx,
+                    &[title_extract, text_extract],
+                    tokenizer,
+                    filter,
+                    doc.id,
+                    doc,
+                );
+            }
+
+            let result = query(
+                &mut idx,
+                &vec![1., 1.],
+                &score::default::bm25::default(),
+                tokenizer,
+                filter,
+                None,
+                &"c".to_string(),
+            );
+            assert_eq!(result.len(), 2);
+            assert_eq!(
+                approx_equal(result.get(0).unwrap().score, 0.1823215567939546, 8),
+                true
+            );
+            assert_eq!(
+                result.get(0).unwrap().key == 1 || result.get(0).unwrap().key == 2,
+                true
+            );
+            assert_eq!(
+                approx_equal(result.get(1).unwrap().score, 0.1823215567939546, 8),
+                true
+            );
+            assert_eq!(
+                result.get(1).unwrap().key == 1 || result.get(1).unwrap().key == 2,
+                true
+            );
+            assert_ne!(result.get(0).unwrap().key, result.get(1).unwrap().key);
+        }
+
         #[test]
         fn it_should_match_text_by_expanding() {
             let mut idx: Index<usize> = create_index(2);

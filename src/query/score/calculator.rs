@@ -1,10 +1,10 @@
 use crate::index::{DocumentPointer, FieldDetails};
-use std::{cell::RefCell, rc::Rc};
+use std::cell::Ref;
 
 pub trait ScoreCalculator<T> {
     fn score(
         &self,
-        document_pointer: Rc<RefCell<DocumentPointer<T>>>,
+        document_pointer: Ref<DocumentPointer<T>>,
         idf: f64,
         field_lengths: &[usize],
         fields_boost: &[f64],

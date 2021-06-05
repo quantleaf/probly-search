@@ -1,5 +1,5 @@
 # Probly Search
-A lightweight fulltext search library for creating small and short lifetime indices. 
+A lightweight full-text search library for creating small and short lifetime indices. 
 
 This library is currently a raw port of the Node library [NDX](https://github.com/ndx-search/ndx). 
 

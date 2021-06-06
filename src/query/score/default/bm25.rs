@@ -6,7 +6,10 @@ use crate::{
 };
 
 pub struct BM25 {
+    /// `bm25k1` BM25 ranking function constant `k1`, controls non-linear term frequency normalization (saturation).
     pub bm25k1: f64,
+
+    /// `bm25b` BM25 ranking function constant `b`, controls to what degree document length normalizes tf values.
     pub bm25b: f64,
 }
 pub fn default() -> BM25 {

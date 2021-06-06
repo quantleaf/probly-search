@@ -37,8 +37,7 @@ Arguments
  * typeparam `T` Document key.
  * `index`.
  * `fields_boost` Fields boost factors.
- * `bm25k1` BM25 ranking function constant `k1`, controls non-linear term frequency normalization (saturation).
- * `bm25b` BM25 ranking function constant `b`, controls to what degree document length normalizes tf values.
+ * `score_calculator` A struct that implements the ScoreCalculator traits to provide score calculations.
  * `tokenizer Tokenizer is a function that breaks a text into words, phrases, symbols, or other meaningful elements called tokens.
  * `filter` Filter is a function that processes tokens and returns terms, terms are used in Inverted Index to index documents.
  * `remove`d Set of removed document keys.
@@ -48,8 +47,6 @@ returns Array of QueryResult structs
 pub fn query<T: Eq + Hash + Clone + Debug, S: ScoreCalculator<T>>(
     index: &mut Index<T>,
     fields_boost: &[f64],
-    /*  bm25k1: f64,
-    bm25b: f64,*/
     score_calculator: &S,
     tokenizer: Tokenizer,
     filter: Filter,

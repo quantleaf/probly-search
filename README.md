@@ -75,7 +75,7 @@ assert_eq!(
 assert_eq!(result.get(0).unwrap().key, 1);
 ```
 
-Go through source tests in for the [BM25 implementation](https://github.com/quantleaf/probly-search/blob/master/src/query/score/default/bm25.rs) for more examples.
+Go through source tests in for the [BM25 implementation](https://github.com/quantleaf/probly-search/blob/master/src/query/score/default/bm25.rs) for more query examples.
 ## License
 
 [MIT](http://opensource.org/licenses/MIT)

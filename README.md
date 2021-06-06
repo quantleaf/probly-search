@@ -7,7 +7,7 @@ This library started as port of the Node library [NDX](https://github.com/ndx-se
 
 ## Documentation
 
-Documentation is under development. For now go through the tests for examples.
+Documentation is under development. For now 
 
 ## Features 
 
@@ -22,7 +22,53 @@ Documentation is under development. For now go through the tests for examples.
 - Small memory footprint, optimized for mobile devices.
 - Serializable index.
 
+## Documentation 
 
+
+### Example
+*Creating an index with a document that has fields. Then indexing two documents and query for one*
+```
+let mut idx: Index<usize> = create_index(2);
+let docs = vec![
+    Doc {
+        id: 1,
+        title: "a b c".to_string(),
+        text: "hello world".to_string(),
+    },
+    Doc {
+        id: 2,
+        title: "c d e".to_string(),
+        text: "lorem ipsum".to_string(),
+    },
+];
+for doc in docs {
+    add_document_to_index(
+        &mut idx,
+        &[title_extract, text_extract],
+        tokenizer,
+        filter,
+        doc.id,
+        doc,
+    );
+}
+let result = query(
+    &mut idx,
+    &vec![1., 1.],
+    &score::default::bm25::default(),
+    tokenizer,
+    filter,
+    None,
+    &"a",
+);
+assert_eq!(result.len(), 1);
+assert_eq!(
+    approx_equal(result.get(0).unwrap().score, 0.6931471805599453, 8),
+    true
+);
+assert_eq!(result.get(0).unwrap().key, 1);
+```
+
+Go through source tests for more examples.
 ## License
 
 [MIT](http://opensource.org/licenses/MIT)

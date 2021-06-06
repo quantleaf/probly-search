@@ -117,7 +117,7 @@ mod tests {
             tokenizer,
             filter,
             None,
-            &"a".to_string(),
+            &"a",
         );
         assert_eq!(result.len(), 1);
         assert_eq!(

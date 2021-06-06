@@ -9,7 +9,7 @@ This library started as port of the Node library [NDX](https://github.com/ndx-se
 
 ## Documentation
 
-Documentation is under development. For now 
+Documentation is under development. For now read the source tests.
 
 ## Features 
 

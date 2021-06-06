@@ -25,6 +25,7 @@ Documentation is under development. For now read the source tests.
 ### Example
 *Creating an index with a document that has 2 fields. Then indexing two documents and query for one using the BM25 scoring function*
 ```rust
+
 let mut idx: Index<usize> = create_index(2);
 let docs = vec![
     Doc {
@@ -38,6 +39,15 @@ let docs = vec![
         text: "lorem ipsum".to_string(),
     },
 ];
+
+fn title_extract(d: &Doc) -> Option<&str> {
+    Some(d.title.as_str())
+}
+
+fn text_extract(d: &Doc) -> Option<&str> {
+    Some(d.text.as_str())
+}
+
 for doc in docs {
     add_document_to_index(
         &mut idx,

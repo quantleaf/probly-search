@@ -7,6 +7,6 @@ licence = "MIT"
 homepage = "https://github.com/quantleaf/probly-search"
 repository = "https://github.com/quantleaf/probly-search"
 documentation = "https://github.com/quantleaf/probly-search"
-readme = "https://github.com/quantleaf/probly-search/blob/master/README.md"
+readme = "README.md"
 keywords = ["search", "quert", "bm25","index"]
 categories = ["text-processing"]

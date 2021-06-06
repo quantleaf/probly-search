@@ -27,7 +27,7 @@ Documentation is under development. For now
 
 
 ### Example
-*Creating an index with a document that has fields. Then indexing two documents and query for one*
+*Creating an index with a document that has 2 fields. Then indexing two documents and query for one using the BM25 scoring function*
 ```rust
 let mut idx: Index<usize> = create_index(2);
 let docs = vec![

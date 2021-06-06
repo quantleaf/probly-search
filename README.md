@@ -28,7 +28,7 @@ Documentation is under development. For now
 
 ### Example
 *Creating an index with a document that has fields. Then indexing two documents and query for one*
-```
+```rust
 let mut idx: Index<usize> = create_index(2);
 let docs = vec![
     Doc {

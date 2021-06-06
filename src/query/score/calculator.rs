@@ -1,6 +1,10 @@
 use crate::index::{DocumentPointer, FieldDetails};
 use std::cell::Ref;
 
+/**
+Implement this trait for creating a scoring functionality
+ * typeparam `T` Document key.
+*/
 pub trait ScoreCalculator<T> {
     fn score(
         &self,

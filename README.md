@@ -7,10 +7,6 @@ A lightweight full-text search library that provides full control over the scori
 
 This library started as port of the Node library [NDX](https://github.com/ndx-search/ndx).
 
-## Documentation
-
-Documentation is under development. For now read the source tests.
-
 ## Features 
 
 - Multiple fields full-text indexing and searching.
@@ -24,7 +20,7 @@ Documentation is under development. For now read the source tests.
 - Small memory footprint, optimized for mobile devices.
 
 ## Documentation 
-
+Documentation is under development. For now read the source tests.
 
 ### Example
 *Creating an index with a document that has 2 fields. Then indexing two documents and query for one using the BM25 scoring function*

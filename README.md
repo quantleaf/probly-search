@@ -20,7 +20,6 @@ Documentation is under development. For now
 - Configurable tokenizer and term filter.
 - Free text queries with query expansion.
 - Small memory footprint, optimized for mobile devices.
-- Serializable index.
 
 ## Documentation 
 

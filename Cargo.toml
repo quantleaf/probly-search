@@ -10,3 +10,4 @@ documentation = "https://github.com/quantleaf/probly-search"
 readme = "README.md"
 keywords = ["search", "quert", "bm25","index"]
 categories = ["text-processing"]
+exclude = [".github/**", ".gitignore", ".rustfmt.toml"]

@@ -1,9 +1,10 @@
 [package]
 name = "probly-search"
+description = "A lightweight full-text search engine with a fully customizable scoring function"
 version = "0.1.0"
 authors = ["marcus-pousette <marcus.pousette@quantleaf.com>"]
 edition = "2018"
-licence = "MIT"
+license = "MIT"
 homepage = "https://github.com/quantleaf/probly-search"
 repository = "https://github.com/quantleaf/probly-search"
 documentation = "https://github.com/quantleaf/probly-search"

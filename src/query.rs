@@ -21,11 +21,11 @@ use self::score::calculator::{FieldData, TermData};
  * `T` Document key.
 */
 #[derive(Debug, PartialEq)]
-pub struct QueryResult<I> {
+pub struct QueryResult<T> {
     /**
      * Document key.
      */
-    pub key: I,
+    pub key: T,
     /**
      * Result score.
      */
@@ -57,14 +57,14 @@ Arguments
  * typeparam `T` Document key.
  * `index`.
  * `query` Query string.
- * `score_calculator` A struct that implements the ScoreCalculator traits to provide score calculations.
+ * `score_calculator` A struct that implements the ScoreCalculator trait to provide score calculations.
  * `tokenizer Tokenizer is a function that breaks a text into words, phrases, symbols, or other meaningful elements called tokens.
  * `filter` Filter is a function that processes tokens and returns terms, terms are used in Inverted Index to index documents.
  * `fields_boost` Fields boost factors.
  * `remove`d Set of removed document keys.
 
 returns Array of QueryResult structs
- */
+*/
 pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
     index: &mut Index<T>,
     query: &str,
@@ -110,9 +110,13 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                             pointer_option = pointer.borrow().next.clone();
                         }
                         if document_frequency > 0 {
+                            let term_expansion_data = TermData {
+                                all_query_terms: &query_terms,
+                                query_term: &query_term,
+                                query_term_expanded: &query_term_expanded,
+                            };
                             let pre_calculations = &score_calculator.before_each(
-                                &query_term.as_str(),
-                                &query_term_expanded.as_str(),
+                                &term_expansion_data,
                                 document_frequency,
                                 docs,
                             );
@@ -134,11 +138,7 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                                             fields_boost,
                                             fields,
                                         },
-                                        &TermData {
-                                            all_query_terms: &query_terms,
-                                            query_term: &query_term,
-                                            query_term_expanded: &query_term_expanded,
-                                        },
+                                        &term_expansion_data,
                                     );
                                     if let Some(s) = score {
                                         let key = &pointer_borrowed.details.borrow().key;
@@ -159,7 +159,6 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
             }
         }
     }
-    score_calculator.after_all();
 
     let mut result: Vec<QueryResult<T>> = Vec::new();
     for (key, score) in scores {
@@ -167,6 +166,9 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
     }
 
     result.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+
+    score_calculator.finalize(&mut result);
+
     result
 }
 

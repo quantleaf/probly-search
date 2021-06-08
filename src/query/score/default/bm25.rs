@@ -37,21 +37,20 @@ pub struct BM25TermCalculations {
 impl<T: Debug> ScoreCalculator<T, BM25TermCalculations> for BM25 {
     fn before_each(
         &mut self,
-        query_term: &str,
-        query_term_expanded: &str,
+        term_expansion: &TermData,
         document_frequency: usize,
         documents: &HashMap<T, Rc<RefCell<DocumentDetails<T>>>>,
     ) -> Option<BM25TermCalculations> {
         Some(BM25TermCalculations {
             expansion_boost: {
-                if query_term_expanded == query_term {
+                if term_expansion.query_term_expanded == term_expansion.query_term {
                     1_f64
                 } else {
                     f64::ln(
                         1_f64
                             + (1_f64
-                                / (1_f64 + (query_term_expanded.len() as f64)
-                                    - (query_term.len() as f64))),
+                                / (1_f64 + (term_expansion.query_term_expanded.len() as f64)
+                                    - (term_expansion.query_term.len() as f64))),
                     )
                 }
             },
@@ -103,136 +102,41 @@ mod tests {
 
     use super::*;
     use crate::{
-        index::{add_document_to_index, create_index, Index},
-        query::query,
+        index::Index,
+        query::QueryResult,
+        test_util::{build_index, test_score},
     };
-
-    fn approx_equal(a: f64, b: f64, dp: u8) -> bool {
-        let p: f64 = 10f64.powf(-(dp as f64));
-
-        if (a - b).abs() < p {
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    struct Doc {
-        id: usize,
-        title: String,
-        text: String,
-    }
-    fn tokenizer(s: &str) -> Vec<String> {
-        s.split(' ')
-            .map(|slice| slice.to_owned())
-            .collect::<Vec<String>>()
-    }
-    fn title_extract(d: &Doc) -> Option<&str> {
-        Some(d.title.as_str())
-    }
-    fn text_extract(d: &Doc) -> Option<&str> {
-        Some(d.text.as_str())
-    }
-
-    fn filter(s: &String) -> String {
-        s.to_owned()
-    }
-
     #[test]
     fn it_should_return_doc_1() {
-        let mut idx: Index<usize> = create_index(2);
-        let docs = vec![
-            Doc {
-                id: 1,
-                title: "a b c".to_string(),
-                text: "hello world".to_string(),
-            },
-            Doc {
-                id: 2,
-                title: "c d e".to_string(),
-                text: "lorem ipsum".to_string(),
-            },
-        ];
-        for doc in docs {
-            add_document_to_index(
-                &mut idx,
-                &[title_extract, text_extract],
-                tokenizer,
-                filter,
-                doc.id,
-                doc,
-            );
-        }
-        let result = query(
+        let mut idx: Index<usize> = build_index(&["a b c", "c d e"]);
+        test_score(
             &mut idx,
-            &"a",
             &mut new(),
-            tokenizer,
-            filter,
-            &vec![1., 1.],
-            None,
+            &"a".to_string(),
+            vec![QueryResult {
+                key: 0,
+                score: 0.6931471805599453,
+            }],
         );
-        assert_eq!(result.len(), 1);
-        assert_eq!(
-            approx_equal(result.get(0).unwrap().score, 0.6931471805599453, 8),
-            true
-        );
-        assert_eq!(result.get(0).unwrap().key, 1);
     }
 
     #[test]
     fn it_should_return_doc_1_and_2() {
-        let mut idx: Index<usize> = create_index(2);
-        let docs = vec![
-            Doc {
-                id: 1,
-                title: "a b c".to_string(),
-                text: "hello world".to_string(),
-            },
-            Doc {
-                id: 2,
-                title: "c d e".to_string(),
-                text: "lorem ipsum".to_string(),
-            },
-        ];
-
-        for doc in docs {
-            add_document_to_index(
-                &mut idx,
-                &[title_extract, text_extract],
-                tokenizer,
-                filter,
-                doc.id,
-                doc,
-            );
-        }
-
-        let result = query(
+        let mut idx: Index<usize> = build_index(&["a b c", "c d e"]);
+        test_score(
             &mut idx,
-            &"c".to_string(),
             &mut new(),
-            tokenizer,
-            filter,
-            &vec![1., 1.],
-            None,
+            &"c".to_string(),
+            vec![
+                QueryResult {
+                    key: 0,
+                    score: 0.1823215567939546,
+                },
+                QueryResult {
+                    key: 1,
+                    score: 0.1823215567939546,
+                },
+            ],
         );
-        assert_eq!(result.len(), 2);
-        assert_eq!(
-            approx_equal(result.get(0).unwrap().score, 0.1823215567939546, 8),
-            true
-        );
-        assert_eq!(
-            result.get(0).unwrap().key == 1 || result.get(0).unwrap().key == 2,
-            true
-        );
-        assert_eq!(
-            approx_equal(result.get(1).unwrap().score, 0.1823215567939546, 8),
-            true
-        );
-        assert_eq!(
-            result.get(1).unwrap().key == 1 || result.get(1).unwrap().key == 2,
-            true
-        );
-        assert_ne!(result.get(0).unwrap().key, result.get(1).unwrap().key);
     }
 }

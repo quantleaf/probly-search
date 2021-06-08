@@ -5,6 +5,7 @@
 use std::{
     cell::{Ref, RefCell},
     collections::HashMap,
+    fmt::Debug,
     rc::Rc,
 };
 
@@ -20,7 +21,7 @@ pub struct BM25 {
     /// `bm25b` BM25 ranking function constant `b`, controls to what degree document length normalizes tf values.
     pub bm25b: f64,
 }
-pub fn default() -> BM25 {
+pub fn new() -> BM25 {
     BM25 {
         bm25b: 0.75,
         bm25k1: 1.2,
@@ -33,15 +34,15 @@ pub struct BM25TermCalculations {
     /// Boosting based on term length matching. Bounded by (-inf, 1]
     expansion_boost: f64,
 }
-impl<T> ScoreCalculator<T, BM25TermCalculations> for BM25 {
-    fn before(
-        &self,
+impl<T: Debug> ScoreCalculator<T, BM25TermCalculations> for BM25 {
+    fn before_each(
+        &mut self,
         query_term: &str,
         query_term_expanded: &str,
         document_frequency: usize,
         documents: &HashMap<T, Rc<RefCell<DocumentDetails<T>>>>,
-    ) -> BM25TermCalculations {
-        BM25TermCalculations {
+    ) -> Option<BM25TermCalculations> {
+        Some(BM25TermCalculations {
             expansion_boost: {
                 if query_term_expanded == query_term {
                     1_f64
@@ -59,16 +60,17 @@ impl<T> ScoreCalculator<T, BM25TermCalculations> for BM25 {
                     + ((documents.len() - document_frequency) as f64 + 0.5)
                         / (document_frequency as f64 + 0.5),
             ),
-        }
+        })
     }
 
     fn score(
-        &self,
-        before_output: &BM25TermCalculations,
+        &mut self,
+        before_output: Option<&BM25TermCalculations>,
         document_pointer: Ref<DocumentPointer<T>>,
         field_data: &FieldData,
-        term_expansion: &TermData,
+        _: &TermData,
     ) -> Option<f64> {
+        let pre_calculations = &before_output.unwrap(); // it will exist as we need BM25 parameters
         let mut score: f64 = 0_f64;
         for x in 0..field_data.field_lengths.len() {
             let mut tf = (&document_pointer.term_frequency[x]).to_owned() as f64;
@@ -84,24 +86,25 @@ impl<T> ScoreCalculator<T, BM25TermCalculations> for BM25 {
                                 * (field_length.to_owned() as f64 / avg_field_length as f64))
                         + tf);
                 score += tf
-                    * before_output.idf
+                    * pre_calculations.idf
                     * field_data.fields_boost[x]
-                    * before_output.expansion_boost;
+                    * pre_calculations.expansion_boost;
             }
         }
         if score > 0_f64 {
             return Some(score);
         }
-        return None;
+        None
     }
 }
 
 #[cfg(test)]
 mod tests {
 
+    use super::*;
     use crate::{
         index::{add_document_to_index, create_index, Index},
-        query::{query, score},
+        query::query,
     };
 
     fn approx_equal(a: f64, b: f64, dp: u8) -> bool {
@@ -163,7 +166,7 @@ mod tests {
         let result = query(
             &mut idx,
             &"a",
-            &score::default::bm25::default(),
+            &mut new(),
             tokenizer,
             filter,
             &vec![1., 1.],
@@ -207,7 +210,7 @@ mod tests {
         let result = query(
             &mut idx,
             &"c".to_string(),
-            &score::default::bm25::default(),
+            &mut new(),
             tokenizer,
             filter,
             &vec![1., 1.],

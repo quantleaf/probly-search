@@ -33,21 +33,21 @@ pub struct QueryResult<I> {
 }
 
 pub fn max_score_merger(
-    score: f64,
+    score: &f64,
     previous_score: Option<&f64>,
     document_visited_for_term: bool,
 ) -> f64 {
-    return {
+    {
         if let Some(p) = previous_score {
             if document_visited_for_term {
-                f64::max(p.to_owned(), score)
+                f64::max(p.to_owned(), score.to_owned())
             } else {
                 p + score
             }
         } else {
-            score
+            score.to_owned()
         }
-    };
+    }
 }
 
 /**
@@ -68,7 +68,7 @@ returns Array of QueryResult structs
 pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
     index: &mut Index<T>,
     query: &str,
-    score_calculator: &S,
+    score_calculator: &mut S,
     tokenizer: Tokenizer,
     filter: Filter,
     fields_boost: &[f64],
@@ -110,7 +110,7 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                             pointer_option = pointer.borrow().next.clone();
                         }
                         if document_frequency > 0 {
-                            let pre_calculations = score_calculator.before(
+                            let pre_calculations = &score_calculator.before_each(
                                 &query_term.as_str(),
                                 &query_term_expanded.as_str(),
                                 document_frequency,
@@ -126,8 +126,8 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                                         .unwrap()
                                         .contains(&pointer_borrowed.details.borrow().key)
                                 {
-                                    let score = score_calculator.score(
-                                        &pre_calculations,
+                                    let score = &score_calculator.score(
+                                        pre_calculations.as_ref(),
                                         p.borrow(),
                                         &FieldData {
                                             field_lengths,
@@ -159,6 +159,7 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
             }
         }
     }
+    score_calculator.after_all();
 
     let mut result: Vec<QueryResult<T>> = Vec::new();
     for (key, score) in scores {
@@ -247,8 +248,6 @@ mod tests {
     }
 
     pub mod query {
-        use crate::query::score;
-
         use super::*;
 
         #[test]
@@ -279,7 +278,7 @@ mod tests {
             let result = query(
                 &mut idx,
                 &"a".to_string(),
-                &score::default::bm25::default(),
+                &mut crate::query::score::default::bm25::new(),
                 tokenizer,
                 filter,
                 &vec![1., 1.],
@@ -323,7 +322,7 @@ mod tests {
             let result = query(
                 &mut idx,
                 &"c".to_string(),
-                &score::default::bm25::default(),
+                &mut crate::query::score::default::bm25::new(),
                 tokenizer,
                 filter,
                 &vec![1., 1.],
@@ -379,7 +378,7 @@ mod tests {
             let result = query(
                 &mut idx,
                 &"h".to_string(),
-                &score::default::bm25::default(),
+                &mut crate::query::score::default::bm25::new(),
                 tokenizer,
                 filter,
                 &vec![1., 1.],
@@ -429,7 +428,7 @@ mod tests {
             let result = query(
                 &mut idx,
                 &"a".to_string(),
-                &score::default::bm25::default(),
+                &mut crate::query::score::default::bm25::new(),
                 tokenizer,
                 custom_filter,
                 &vec![1., 1.],
@@ -468,7 +467,7 @@ mod tests {
             let result = query(
                 &mut idx,
                 &"a d".to_string(),
-                &score::default::bm25::default(),
+                &mut crate::query::score::default::bm25::new(),
                 tokenizer,
                 filter,
                 &vec![1., 1.],

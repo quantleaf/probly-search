@@ -2,6 +2,7 @@ use crate::index::{DocumentDetails, DocumentPointer, FieldDetails};
 use std::{
     cell::{Ref, RefCell},
     collections::HashMap,
+    fmt::Debug,
     rc::Rc,
 };
 
@@ -27,19 +28,24 @@ Implement this trait for creating a scoring functionality
  * `expansion_boost` A number between -inf and 1 that describes how similiar the query is to a document in terms of length.
  * `field` information about the fields
 */
-pub trait ScoreCalculator<T, M> {
-    fn before(
-        &self,
-        query_term: &str,
-        query_term_expanded: &str,
-        document_frequency: usize,
-        documents: &HashMap<T, Rc<RefCell<DocumentDetails<T>>>>,
-    ) -> M;
+pub trait ScoreCalculator<T: Debug, M> {
+    fn before_each(
+        &mut self,
+        _: &str,
+        _: &str,
+        _: usize,
+        _: &HashMap<T, Rc<RefCell<DocumentDetails<T>>>>,
+    ) -> Option<M> {
+        None
+    }
+
     fn score(
-        &self,
-        before_output: &M,
+        &mut self,
+        before_output: Option<&M>,
         document_pointer: Ref<DocumentPointer<T>>,
         field_data: &FieldData,
         term_expansion: &TermData,
     ) -> Option<f64>;
+
+    fn after_all(&mut self) {}
 }

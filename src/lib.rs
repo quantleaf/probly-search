@@ -4,15 +4,10 @@ pub mod utils;
 
 #[cfg(test)]
 pub mod test_util {
-    use std::{fmt::Debug, hash::Hash};
 
     use crate::{
-        index::{add_document_to_index, create_index, DocumentPointer, Index},
-        query::{
-            query,
-            score::calculator::{FieldData, ScoreCalculator, TermData},
-            QueryResult,
-        },
+        index::{add_document_to_index, create_index, Index},
+        query::{query, score::calculator::ScoreCalculator, QueryResult},
     };
     fn approx_equal(a: f64, b: f64, dp: u8) -> bool {
         let p: f64 = 10f64.powf(-(dp as f64));

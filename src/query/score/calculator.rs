@@ -38,8 +38,8 @@ Implement this trait for creating a scoring functionality
 */
 pub trait ScoreCalculator<T: Debug, M> {
     /**
-        For expansion term generated for each query term, this method is invoked prior to iterating on the inverted index tree.
-        This method can be used to do precalculations with the document frequency parameter (essential for BM25 implementation)
+    For expansion term generated for each query term, this method is invoked prior to iterating on the inverted index tree.
+    This method can be used to do precalculations with the document frequency parameter (essential for BM25 implementation)
     * `term_expansion` Data about the current term expansion to generate score from
     * `document_frequency` The amount of associated documents to `query_term_expanded`
     * `documents` a map of all documents by key

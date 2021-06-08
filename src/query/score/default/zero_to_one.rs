@@ -1,7 +1,6 @@
 /***
-    https://en.wikipedia.org/wiki/Okapi_BM25
+    normalized 0 to 1 bound scoring
 */
-
 use std::{
     cell::{Ref, RefCell},
     collections::HashMap,
@@ -9,84 +8,45 @@ use std::{
 };
 
 use crate::{
-    index::{DocumentDetails, DocumentPointer},
+    index::{DocumentDetails, DocumentPointer, FieldDetails},
     query::score::calculator::{FieldData, ScoreCalculator, TermData},
 };
 
-pub struct BM25 {
-    /// `bm25k1` BM25 ranking function constant `k1`, controls non-linear term frequency normalization (saturation).
-    pub bm25k1: f64,
-
-    /// `bm25b` BM25 ranking function constant `b`, controls to what degree document length normalizes tf values.
-    pub bm25b: f64,
+pub struct ZeroToOne {}
+pub fn default() -> ZeroToOne {
+    ZeroToOne {}
 }
-pub fn default() -> BM25 {
-    BM25 {
-        bm25b: 0.75,
-        bm25k1: 1.2,
-    }
-}
-pub struct BM25TermCalculations {
-    /// Inverse document frequency
-    idf: f64,
-
-    /// Boosting based on term length matching. Bounded by (-inf, 1]
-    expansion_boost: f64,
-}
-impl<T> ScoreCalculator<T, BM25TermCalculations> for BM25 {
+pub struct ZeroToOneBeforeCalculations {}
+impl<T> ScoreCalculator<T, ZeroToOneBeforeCalculations> for ZeroToOne {
     fn before(
         &self,
         query_term: &str,
         query_term_expanded: &str,
         document_frequency: usize,
         documents: &HashMap<T, Rc<RefCell<DocumentDetails<T>>>>,
-    ) -> BM25TermCalculations {
-        BM25TermCalculations {
-            expansion_boost: {
-                if query_term_expanded == query_term {
-                    1_f64
-                } else {
-                    f64::ln(
-                        1_f64
-                            + (1_f64
-                                / (1_f64 + (query_term_expanded.len() as f64)
-                                    - (query_term.len() as f64))),
-                    )
-                }
-            },
-            idf: f64::ln(
-                1_f64
-                    + ((documents.len() - document_frequency) as f64 + 0.5)
-                        / (document_frequency as f64 + 0.5),
-            ),
-        }
+    ) -> ZeroToOneBeforeCalculations {
+        ZeroToOneBeforeCalculations {}
     }
 
     fn score(
         &self,
-        before_output: &BM25TermCalculations,
+        before_output: &ZeroToOneBeforeCalculations,
         document_pointer: Ref<DocumentPointer<T>>,
         field_data: &FieldData,
-        term_expansion: &TermData,
+        term_data: &TermData,
     ) -> Option<f64> {
         let mut score: f64 = 0_f64;
         for x in 0..field_data.field_lengths.len() {
             let mut tf = (&document_pointer.term_frequency[x]).to_owned() as f64;
             if tf > 0_f64 {
-                // calculating BM25 tf
-                let field_length = &field_data.field_lengths[x];
-                let field_details = &field_data.fields[x];
-                let avg_field_length = field_details.avg;
-                tf = ((self.bm25k1 + 1_f64) * tf)
-                    / (self.bm25k1
-                        * ((1_f64 - self.bm25b)
-                            + self.bm25b
-                                * (field_length.to_owned() as f64 / avg_field_length as f64))
-                        + tf);
-                score += tf
-                    * before_output.idf
-                    * field_data.fields_boost[x]
-                    * before_output.expansion_boost;
+                // special
+                let num_of_terms = term_data.all_query_terms.len() as f64;
+                let field_length = field_data.field_lengths[x];
+                tf = tf / f64::max(field_length as f64, num_of_terms)
+                    * (1_f64
+                        - f64::abs(term_data.query_term_expanded.len() as f64 - num_of_terms)
+                            / (term_data.query_term_expanded.len() as f64));
+                score += tf * field_data.fields_boost[x];
             }
         }
         if score > 0_f64 {

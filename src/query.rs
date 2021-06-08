@@ -13,6 +13,8 @@ use std::{
     rc::Rc,
 };
 
+use self::score::calculator::{FieldData, TermData};
+
 /**
  * Query Result.
 
@@ -30,60 +32,67 @@ pub struct QueryResult<I> {
     pub score: f64,
 }
 
+pub fn max_score_merger(
+    score: f64,
+    previous_score: Option<&f64>,
+    document_visited_for_term: bool,
+) -> f64 {
+    return {
+        if let Some(p) = previous_score {
+            if document_visited_for_term {
+                f64::max(p.to_owned(), score)
+            } else {
+                p + score
+            }
+        } else {
+            score
+        }
+    };
+}
+
 /**
 Performs a search with a simple free text query.
 All token separators work as a disjunction operator.
 Arguments
  * typeparam `T` Document key.
  * `index`.
- * `fields_boost` Fields boost factors.
+ * `query` Query string.
  * `score_calculator` A struct that implements the ScoreCalculator traits to provide score calculations.
  * `tokenizer Tokenizer is a function that breaks a text into words, phrases, symbols, or other meaningful elements called tokens.
  * `filter` Filter is a function that processes tokens and returns terms, terms are used in Inverted Index to index documents.
+ * `fields_boost` Fields boost factors.
  * `remove`d Set of removed document keys.
- * `s` Query string.
+
 returns Array of QueryResult structs
  */
-pub fn query<T: Eq + Hash + Clone + Debug, S: ScoreCalculator<T>>(
+pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
     index: &mut Index<T>,
-    fields_boost: &[f64],
+    query: &str,
     score_calculator: &S,
     tokenizer: Tokenizer,
     filter: Filter,
+    fields_boost: &[f64],
     removed: Option<&HashSet<T>>,
-    s: &str,
 ) -> Vec<QueryResult<T>> {
     let docs = &index.docs;
     let fields = &index.fields;
-    let terms = tokenizer(&s);
+    let query_terms = tokenizer(&query);
     let mut scores: HashMap<T, f64> = HashMap::new();
-
-    for term_pre_filter in terms {
-        let term = filter(&term_pre_filter);
-        if !term.is_empty() {
-            let expanded_terms = expand_term(&index, &term);
-            let mut visited_documents: HashSet<T> = HashSet::new();
-            for e_term in expanded_terms {
-                let expansion_boost = {
-                    if e_term == term {
-                        1_f64
-                    } else {
-                        f64::ln(
-                            1_f64 + (1_f64 / (1_f64 + (e_term.len() as f64) - (term.len() as f64))),
-                        )
-                    }
-                };
-
-                let term_node_option = find_inverted_index_node(Rc::clone(&index.root), &e_term);
-
+    for query_term_pre_filter in &query_terms {
+        let query_term = filter(&query_term_pre_filter);
+        if !query_term.is_empty() {
+            let expanded_terms = expand_term(&index, &query_term);
+            let mut visited_documents_for_term: HashSet<T> = HashSet::new();
+            for query_term_expanded in expanded_terms {
+                let term_node_option =
+                    find_inverted_index_node(Rc::clone(&index.root), &query_term_expanded);
                 if let Some(term_node) = term_node_option {
                     if let Some(term_node_option_first_doc) = &term_node.borrow().first_doc {
                         let mut document_frequency = 0;
                         let mut prev_pointer: Option<Rc<RefCell<DocumentPointer<T>>>> = None;
-
                         let mut pointer_option = Some(Rc::clone(term_node_option_first_doc));
                         while let Some(pointer) = pointer_option {
-                            if removed.is_some()
+                            if removed.is_some() // Cleanup old removed documents while searching. If vaccume after delete, this will have not effect
                                 && removed
                                     .unwrap()
                                     .contains(&pointer.borrow().details.borrow().key)
@@ -100,13 +109,12 @@ pub fn query<T: Eq + Hash + Clone + Debug, S: ScoreCalculator<T>>(
                             }
                             pointer_option = pointer.borrow().next.clone();
                         }
-
                         if document_frequency > 0 {
-                            // calculating BM25 idf
-                            let idf = f64::ln(
-                                1_f64
-                                    + ((docs.len() - document_frequency) as f64 + 0.5)
-                                        / (document_frequency as f64 + 0.5),
+                            let pre_calculations = score_calculator.before(
+                                &query_term.as_str(),
+                                &query_term_expanded.as_str(),
+                                document_frequency,
+                                docs,
                             );
 
                             let mut pointer = Some(Rc::clone(term_node_option_first_doc));
@@ -119,28 +127,28 @@ pub fn query<T: Eq + Hash + Clone + Debug, S: ScoreCalculator<T>>(
                                         .contains(&pointer_borrowed.details.borrow().key)
                                 {
                                     let score = score_calculator.score(
+                                        &pre_calculations,
                                         p.borrow(),
-                                        idf,
-                                        field_lengths,
-                                        fields_boost,
-                                        expansion_boost,
-                                        fields,
+                                        &FieldData {
+                                            field_lengths,
+                                            fields_boost,
+                                            fields,
+                                        },
+                                        &TermData {
+                                            all_query_terms: &query_terms,
+                                            query_term: &query_term,
+                                            query_term_expanded: &query_term_expanded,
+                                        },
                                     );
-                                    if score > 0_f64 {
+                                    if let Some(s) = score {
                                         let key = &pointer_borrowed.details.borrow().key;
-                                        let new_score = {
-                                            if let Some(prev_score) = scores.get(&key) {
-                                                if visited_documents.contains(&key) {
-                                                    f64::max(prev_score.to_owned(), score)
-                                                } else {
-                                                    prev_score + score
-                                                }
-                                            } else {
-                                                score
-                                            }
-                                        };
+                                        let new_score = max_score_merger(
+                                            s,
+                                            scores.get(&key),
+                                            visited_documents_for_term.contains(&key),
+                                        );
                                         scores.insert(key.to_owned(), new_score);
-                                        visited_documents.insert(key.to_owned());
+                                        visited_documents_for_term.insert(key.to_owned());
                                     }
                                 }
                                 pointer = pointer_borrowed.next.clone();
@@ -270,12 +278,12 @@ mod tests {
             }
             let result = query(
                 &mut idx,
-                &vec![1., 1.],
+                &"a".to_string(),
                 &score::default::bm25::default(),
                 tokenizer,
                 filter,
+                &vec![1., 1.],
                 None,
-                &"a".to_string(),
             );
             assert_eq!(result.len(), 1);
             assert_eq!(
@@ -314,12 +322,12 @@ mod tests {
 
             let result = query(
                 &mut idx,
-                &vec![1., 1.],
+                &"c".to_string(),
                 &score::default::bm25::default(),
                 tokenizer,
                 filter,
+                &vec![1., 1.],
                 None,
-                &"c".to_string(),
             );
             assert_eq!(result.len(), 2);
             assert_eq!(
@@ -370,12 +378,12 @@ mod tests {
 
             let result = query(
                 &mut idx,
-                &vec![1., 1.],
+                &"h".to_string(),
                 &score::default::bm25::default(),
                 tokenizer,
                 filter,
+                &vec![1., 1.],
                 None,
-                &"h".to_string(),
             );
             assert_eq!(result.len(), 1);
             assert_eq!(
@@ -420,12 +428,12 @@ mod tests {
             }
             let result = query(
                 &mut idx,
-                &vec![1., 1.],
+                &"a".to_string(),
                 &score::default::bm25::default(),
                 tokenizer,
                 custom_filter,
+                &vec![1., 1.],
                 None,
-                &"a".to_string(),
             );
             assert_eq!(result.len(), 0);
         }
@@ -459,12 +467,12 @@ mod tests {
 
             let result = query(
                 &mut idx,
-                &vec![1., 1.],
+                &"a d".to_string(),
                 &score::default::bm25::default(),
                 tokenizer,
                 filter,
+                &vec![1., 1.],
                 None,
-                &"a d".to_string(),
             );
             assert_eq!(result.len(), 2);
             assert_eq!(

@@ -87,10 +87,14 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                 let term_node_option =
                     find_inverted_index_node(Rc::clone(&index.root), &query_term_expanded);
                 if let Some(term_node) = term_node_option {
-                    if let Some(term_node_option_first_doc) = &term_node.borrow().first_doc {
-                        let mut document_frequency = 0;
+                    let mut term_node_borrowed = term_node.borrow_mut();
+                    let mut new_first_doc = None;
+                    let mut assign_new_first_doc = false;
+                    let mut document_frequency = 0;
+
+                    if let Some(term_node_option_first_doc) = &mut term_node_borrowed.first_doc {
                         let mut prev_pointer: Option<Rc<RefCell<DocumentPointer<T>>>> = None;
-                        let mut pointer_option = Some(Rc::clone(term_node_option_first_doc));
+                        let mut pointer_option = Some(Rc::clone(&term_node_option_first_doc));
                         while let Some(pointer) = pointer_option {
                             if removed.is_some() // Cleanup old removed documents while searching. If vaccume after delete, this will have not effect
                                 && removed
@@ -100,8 +104,9 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                                 if let Some(pp) = &prev_pointer {
                                     pp.borrow_mut().next = pointer.borrow().next.clone();
                                 } else {
-                                    term_node.borrow_mut().first_doc =
-                                        (&pointer.borrow().next).clone();
+                                    new_first_doc = (&pointer.borrow().next).clone();
+                                    assign_new_first_doc = true;
+                                    //  term_node_borrowed.first_doc = (&pointer.borrow().next).clone();
                                 }
                             } else {
                                 prev_pointer = Some(Rc::clone(&pointer));
@@ -109,6 +114,13 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                             }
                             pointer_option = pointer.borrow().next.clone();
                         }
+                    }
+
+                    if assign_new_first_doc {
+                        term_node_borrowed.first_doc = new_first_doc;
+                    }
+
+                    if let Some(term_node_option_first_doc) = &mut term_node_borrowed.first_doc {
                         if document_frequency > 0 {
                             let term_expansion_data = TermData {
                                 all_query_terms: &query_terms,
@@ -121,7 +133,7 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                                 docs,
                             );
 
-                            let mut pointer = Some(Rc::clone(term_node_option_first_doc));
+                            let mut pointer = Some(Rc::clone(&term_node_option_first_doc));
                             while let Some(p) = pointer {
                                 let pointer_borrowed = p.borrow();
                                 let field_lengths = &pointer_borrowed.details.borrow().field_length;

@@ -26,7 +26,7 @@ This start initially as a port of the Node library [NDX](https://github.com/ndx-
 Documentation is under development. For now read the source tests.
 
 ### Example
-*Creating an index with a document that has 2 fields. Then indexing two documents and query for one using the BM25 scoring function*
+*Creating an index with a document that has 2 fields. Query documents, and remove a document.*
 ```rust
 use std::collections::HashSet;
 use probly_search::{

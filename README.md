@@ -28,6 +28,17 @@ Documentation is under development. For now read the source tests.
 ### Example
 *Creating an index with a document that has 2 fields. Then indexing two documents and query for one using the BM25 scoring function*
 ```rust
+use std::collections::HashSet;
+use probly_search::{
+    index::{add_document_to_index, create_index, remove_document_from_index, Index},
+    query::{
+        query,
+        score::default::{bm25, zero_to_one},
+        QueryResult,
+    },
+};
+
+
 // Create index with two fields
 let mut idx: Index<usize> = create_index(2);
 

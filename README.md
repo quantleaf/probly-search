@@ -3,21 +3,24 @@
 [Latest Version]: https://img.shields.io/crates/v/probly-search.svg
 [crates.io]: https://crates.io/crates/probly-search
 
-A lightweight full-text search library that provides full control over the scoring calculations. Intended for creating small and short lifetime indices. 
+A lightweight full-text search library that provides full control over the scoring calculations.
 
-This library started as port of the Node library [NDX](https://github.com/ndx-search/ndx).
+This start initially as a port of the Node library [NDX](https://github.com/ndx-search/ndx).
 
 ## Features 
+- Three ways to do scoring
+    -   [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) ranking function to rank matching documents. The same ranking function that is used by default in [Lucene](http://lucene.apache.org/core/) >= 6.0.0.
+    -   *zero-to-one*, a library unique scoring function that provides a normalized score that is bounded by 0 and 1. Perfect for matching titles/labels with queries.
+    -   Ability to fully customize your own scoring function by implenting the `ScoreCalculator` trait. 
 
-- Multiple fields full-text indexing and searching.
-- Per-field score boosting.
-- [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) ranking function to rank matching documents. The same ranking function that is used by default in [Lucene](http://lucene.apache.org/core/) >= 6.0.0.
-- Ability to fully customize your own scoring function by implenting the `ScoreCalculator` trait. 
 - [Trie](https://en.wikipedia.org/wiki/Trie) based dynamic
   [Inverted Index](https://en.wikipedia.org/wiki/Inverted_index).
+- Small memory footprint, optimized for mobile devices.
+- Multiple fields full-text indexing and searching.
+- Per-field score boosting.
 - Configurable tokenizer and term filter.
 - Free text queries with query expansion.
-- Small memory footprint, optimized for mobile devices.
+
 
 ## Documentation 
 Documentation is under development. For now read the source tests.
@@ -25,57 +28,103 @@ Documentation is under development. For now read the source tests.
 ### Example
 *Creating an index with a document that has 2 fields. Then indexing two documents and query for one using the BM25 scoring function*
 ```rust
+use std::collections::HashSet;
+use probly_search::{
+    index::{add_document_to_index, create_index, remove_document_from_index, Index},
+    query::{
+        query,
+        score::default::{bm25, zero_to_one},
+        QueryResult,
+    },
+};
 
+
+// Create index with two fields
 let mut idx: Index<usize> = create_index(2);
-let docs = vec![
-    Doc {
-        id: 1,
-        title: "a b c".to_string(),
-        text: "hello world".to_string(),
-    },
-    Doc {
-        id: 2,
-        title: "c d e".to_string(),
-        text: "lorem ipsum".to_string(),
-    },
-];
 
+// Create docs from a custom Doc struct
+struct Doc {
+    id: usize,
+    title: String,
+    description: String,
+}
+
+let doc_1 = Doc {
+    id: 0,
+    title: "abc".to_string(),
+    description: "dfg".to_string(),
+};
+
+let doc_2 = Doc {
+    id: 1,
+    title: "dfgh".to_string(),
+    description: "abcd".to_string(),
+};
+
+// Add documents to index 
+fn tokenizer(s: &str) -> Vec<String> {
+    s.split(' ')
+        .map(|slice| slice.to_owned())
+        .collect::<Vec<String>>()
+}
 fn title_extract(d: &Doc) -> Option<&str> {
     Some(d.title.as_str())
 }
 
-fn text_extract(d: &Doc) -> Option<&str> {
-    Some(d.text.as_str())
+fn description_extract(d: &Doc) -> Option<&str> {
+    Some(d.description.as_str())
 }
 
-for doc in docs {
-    add_document_to_index(
-        &mut idx,
-        &[title_extract, text_extract],
-        tokenizer,
-        filter,
-        doc.id,
-        doc,
-    );
+fn filter(s: &String) -> String {
+    s.to_owned()
 }
-let result = query(
+
+add_document_to_index(
     &mut idx,
-    &vec![1., 1.],
-    &score::default::bm25::default(),
+    &[title_extract, description_extract],
     tokenizer,
     filter,
+    doc_1.id,
+    doc_1.clone(),
+);
+
+add_document_to_index(
+    &mut idx,
+    &[title_extract, description_extract],
+    tokenizer,
+    filter,
+    doc_2.id,
+    doc_2,
+);
+
+// Search, expect 2 results
+let mut result = query(
+    &mut idx,
+    &"abc",
+    &mut bm25::new(),
+    tokenizer,
+    filter,
+    &[1., 1.],
     None,
-    &"a",
 );
-assert_eq!(result.len(), 1);
+assert_eq!(result.len(), 2);
 assert_eq!(
-    approx_equal(result.get(0).unwrap().score, 0.6931471805599453, 8),
-    true
+    result[0],
+    QueryResult {
+        key: 0,
+        score: 0.6931471805599453
+    }
 );
-assert_eq!(result.get(0).unwrap().key, 1);
+assert_eq!(
+    result[1],
+    QueryResult {
+        key: 1,
+        score: 0.28104699650060755
+    }
+);
 ```
 
-Go through source tests in for the [BM25 implementation](https://github.com/quantleaf/probly-search/blob/master/src/query/score/default/bm25.rs) for more examples.
+Go through source tests in for the [BM25 implementation](https://github.com/quantleaf/probly-search/blob/master/src/query/score/default/bm25.rs) and [zero-to-one implementation](https://github.com/quantleaf/probly-search/blob/master/src/query/score/default/zero_to_one.rs) for more query examples.
 ## License
 
 [MIT](http://opensource.org/licenses/MIT)

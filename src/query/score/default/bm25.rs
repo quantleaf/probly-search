@@ -1,8 +1,17 @@
-use std::cell::Ref;
+/***
+    https://en.wikipedia.org/wiki/Okapi_BM25
+*/
+
+use std::{
+    cell::{Ref, RefCell},
+    collections::HashMap,
+    fmt::Debug,
+    rc::Rc,
+};
 
 use crate::{
-    index::{DocumentPointer, FieldDetails},
-    query::score::calculator::ScoreCalculator,
+    index::{DocumentDetails, DocumentPointer},
+    query::score::calculator::{FieldData, ScoreCalculator, TermData},
 };
 
 pub struct BM25 {
@@ -12,29 +21,62 @@ pub struct BM25 {
     /// `bm25b` BM25 ranking function constant `b`, controls to what degree document length normalizes tf values.
     pub bm25b: f64,
 }
-pub fn default() -> BM25 {
+pub fn new() -> BM25 {
     BM25 {
         bm25b: 0.75,
         bm25k1: 1.2,
     }
 }
-impl<T> ScoreCalculator<T> for BM25 {
+pub struct BM25TermCalculations {
+    /// Inverse document frequency
+    idf: f64,
+
+    /// Boosting based on term length matching. Bounded by (-inf, 1]
+    expansion_boost: f64,
+}
+impl<T: Debug> ScoreCalculator<T, BM25TermCalculations> for BM25 {
+    fn before_each(
+        &mut self,
+        term_expansion: &TermData,
+        document_frequency: usize,
+        documents: &HashMap<T, Rc<RefCell<DocumentDetails<T>>>>,
+    ) -> Option<BM25TermCalculations> {
+        Some(BM25TermCalculations {
+            expansion_boost: {
+                if term_expansion.query_term_expanded == term_expansion.query_term {
+                    1_f64
+                } else {
+                    f64::ln(
+                        1_f64
+                            + (1_f64
+                                / (1_f64 + (term_expansion.query_term_expanded.len() as f64)
+                                    - (term_expansion.query_term.len() as f64))),
+                    )
+                }
+            },
+            idf: f64::ln(
+                1_f64
+                    + ((documents.len() - document_frequency) as f64 + 0.5)
+                        / (document_frequency as f64 + 0.5),
+            ),
+        })
+    }
+
     fn score(
-        &self,
+        &mut self,
+        before_output: Option<&BM25TermCalculations>,
         document_pointer: Ref<DocumentPointer<T>>,
-        idf: f64,
-        field_lengths: &[usize],
-        fields_boost: &[f64],
-        expansion_boost: f64,
-        fields: &[FieldDetails],
-    ) -> f64 {
+        field_data: &FieldData,
+        _: &TermData,
+    ) -> Option<f64> {
+        let pre_calculations = &before_output.unwrap(); // it will exist as we need BM25 parameters
         let mut score: f64 = 0_f64;
-        for x in 0..field_lengths.len() {
+        for x in 0..field_data.field_lengths.len() {
             let mut tf = (&document_pointer.term_frequency[x]).to_owned() as f64;
             if tf > 0_f64 {
                 // calculating BM25 tf
-                let field_length = &field_lengths[x];
-                let field_details = &fields[x];
+                let field_length = &field_data.field_lengths[x];
+                let field_details = &field_data.fields[x];
                 let avg_field_length = field_details.avg;
                 tf = ((self.bm25k1 + 1_f64) * tf)
                     / (self.bm25k1
@@ -42,147 +84,59 @@ impl<T> ScoreCalculator<T> for BM25 {
                             + self.bm25b
                                 * (field_length.to_owned() as f64 / avg_field_length as f64))
                         + tf);
-                score += tf * idf * fields_boost[x] * expansion_boost;
+                score += tf
+                    * pre_calculations.idf
+                    * field_data.fields_boost[x]
+                    * pre_calculations.expansion_boost;
             }
         }
-        score
+        if score > 0_f64 {
+            return Some(score);
+        }
+        None
     }
 }
 
 #[cfg(test)]
 mod tests {
 
+    use super::*;
     use crate::{
-        index::{add_document_to_index, create_index, Index},
-        query::{query, score},
+        index::Index,
+        query::QueryResult,
+        test_util::{build_index, test_score},
     };
-
-    fn approx_equal(a: f64, b: f64, dp: u8) -> bool {
-        let p: f64 = 10f64.powf(-(dp as f64));
-
-        if (a - b).abs() < p {
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    struct Doc {
-        id: usize,
-        title: String,
-        text: String,
-    }
-    fn tokenizer(s: &str) -> Vec<String> {
-        s.split(' ')
-            .map(|slice| slice.to_owned())
-            .collect::<Vec<String>>()
-    }
-    fn title_extract(d: &Doc) -> Option<&str> {
-        Some(d.title.as_str())
-    }
-    fn text_extract(d: &Doc) -> Option<&str> {
-        Some(d.text.as_str())
-    }
-
-    fn filter(s: &String) -> String {
-        s.to_owned()
-    }
-
     #[test]
     fn it_should_return_doc_1() {
-        let mut idx: Index<usize> = create_index(2);
-        let docs = vec![
-            Doc {
-                id: 1,
-                title: "a b c".to_string(),
-                text: "hello world".to_string(),
-            },
-            Doc {
-                id: 2,
-                title: "c d e".to_string(),
-                text: "lorem ipsum".to_string(),
-            },
-        ];
-        for doc in docs {
-            add_document_to_index(
-                &mut idx,
-                &[title_extract, text_extract],
-                tokenizer,
-                filter,
-                doc.id,
-                doc,
-            );
-        }
-        let result = query(
+        let mut idx: Index<usize> = build_index(&["a b c", "c d e"]);
+        test_score(
             &mut idx,
-            &vec![1., 1.],
-            &score::default::bm25::default(),
-            tokenizer,
-            filter,
-            None,
-            &"a",
+            &mut new(),
+            &"a".to_string(),
+            vec![QueryResult {
+                key: 0,
+                score: 0.6931471805599453,
+            }],
         );
-        assert_eq!(result.len(), 1);
-        assert_eq!(
-            approx_equal(result.get(0).unwrap().score, 0.6931471805599453, 8),
-            true
-        );
-        assert_eq!(result.get(0).unwrap().key, 1);
     }
 
     #[test]
     fn it_should_return_doc_1_and_2() {
-        let mut idx: Index<usize> = create_index(2);
-        let docs = vec![
-            Doc {
-                id: 1,
-                title: "a b c".to_string(),
-                text: "hello world".to_string(),
-            },
-            Doc {
-                id: 2,
-                title: "c d e".to_string(),
-                text: "lorem ipsum".to_string(),
-            },
-        ];
-
-        for doc in docs {
-            add_document_to_index(
-                &mut idx,
-                &[title_extract, text_extract],
-                tokenizer,
-                filter,
-                doc.id,
-                doc,
-            );
-        }
-
-        let result = query(
+        let mut idx: Index<usize> = build_index(&["a b c", "c d e"]);
+        test_score(
             &mut idx,
-            &vec![1., 1.],
-            &score::default::bm25::default(),
-            tokenizer,
-            filter,
-            None,
+            &mut new(),
             &"c".to_string(),
+            vec![
+                QueryResult {
+                    key: 0,
+                    score: 0.1823215567939546,
+                },
+                QueryResult {
+                    key: 1,
+                    score: 0.1823215567939546,
+                },
+            ],
         );
-        assert_eq!(result.len(), 2);
-        assert_eq!(
-            approx_equal(result.get(0).unwrap().score, 0.1823215567939546, 8),
-            true
-        );
-        assert_eq!(
-            result.get(0).unwrap().key == 1 || result.get(0).unwrap().key == 2,
-            true
-        );
-        assert_eq!(
-            approx_equal(result.get(1).unwrap().score, 0.1823215567939546, 8),
-            true
-        );
-        assert_eq!(
-            result.get(1).unwrap().key == 1 || result.get(1).unwrap().key == 2,
-            true
-        );
-        assert_ne!(result.get(0).unwrap().key, result.get(1).unwrap().key);
     }
 }

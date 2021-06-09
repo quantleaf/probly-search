@@ -8,9 +8,6 @@ A lightweight full-text search library that provides full control over the scori
 This start initially as a port of the Node library [NDX](https://github.com/ndx-search/ndx).
 
 ## Features 
-
-- Multiple fields full-text indexing and searching.
-- Per-field score boosting.
 - Three ways to do scoring
     -   [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) ranking function to rank matching documents. The same ranking function that is used by default in [Lucene](http://lucene.apache.org/core/) >= 6.0.0.
     -   *zero-to-one*, a library unique scoring function that provides a normalized score that is bounded by 0 and 1. Perfect for matching titles/labels with queries.
@@ -18,9 +15,12 @@ This start initially as a port of the Node library [NDX](https://github.com/ndx-
 
 - [Trie](https://en.wikipedia.org/wiki/Trie) based dynamic
   [Inverted Index](https://en.wikipedia.org/wiki/Inverted_index).
+- Small memory footprint, optimized for mobile devices.
+- Multiple fields full-text indexing and searching.
+- Per-field score boosting.
 - Configurable tokenizer and term filter.
 - Free text queries with query expansion.
-- Small memory footprint, optimized for mobile devices.
+
 
 ## Documentation 
 Documentation is under development. For now read the source tests.

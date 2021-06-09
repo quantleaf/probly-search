@@ -124,7 +124,7 @@ assert_eq!(
 );
 ```
 
-Go through source tests in for the [BM25 implementation](https://github.com/quantleaf/probly-search/blob/master/src/query/score/default/bm25.rs) for more query examples.
+Go through source tests in for the [BM25 implementation](https://github.com/quantleaf/probly-search/blob/master/src/query/score/default/bm25.rs) and [zero-to-one implementation](https://github.com/quantleaf/probly-search/blob/master/src/query/score/default/zero_to_one.rs) for more query examples.
 ## License
 
 [MIT](http://opensource.org/licenses/MIT)

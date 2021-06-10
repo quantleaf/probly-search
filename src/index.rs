@@ -622,10 +622,9 @@ mod tests {
             for doc in docs {
                 add_document_to_index(&mut idx, &[field_accessor], tokenizer, filter, doc.id, doc)
             }
-            let x = 1;
             remove_document_from_index(&mut idx, &mut removed, 1);
-            let y = 3;
             vacuum_index(&mut idx, &mut removed);
+
             assert_eq!(idx.docs.len(), 0);
             assert_eq!(idx.fields.len(), 1);
             assert_eq!(idx.fields.get(0).unwrap().sum, 0);

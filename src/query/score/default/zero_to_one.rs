@@ -8,10 +8,10 @@
     -   We want the query term lengths to match the document term lengths
 */
 use std::{
-    cell::Ref,
     collections::{HashMap, HashSet},
     fmt::Debug,
     hash::Hash,
+    sync::RwLockReadGuard,
 };
 
 use crate::{
@@ -37,7 +37,7 @@ impl<T: Debug + Eq + Hash + Clone> ScoreCalculator<T, ZeroToOneBeforeCalculation
     fn score(
         &mut self,
         _: Option<&ZeroToOneBeforeCalculations>,
-        document_pointer: Ref<DocumentPointer<T>>,
+        document_pointer: RwLockReadGuard<DocumentPointer<T>>,
         field_data: &FieldData,
         term_data: &TermData,
     ) -> Option<f64> {
@@ -45,7 +45,7 @@ impl<T: Debug + Eq + Hash + Clone> ScoreCalculator<T, ZeroToOneBeforeCalculation
            To prevent repeating query terms generating higher scores we track and manipulate
            statistics to track whether scoring has happened for a doc with a certain term
         */
-        let key = &document_pointer.details.borrow().key;
+        let key = &document_pointer.details.read().unwrap().key;
         let mut has_key = false;
         let contains_term_on_key = match self.visited_terms_by_document.get(&key) {
             Some(terms) => {

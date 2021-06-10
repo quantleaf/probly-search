@@ -3,10 +3,9 @@
 */
 
 use std::{
-    cell::{Ref, RefCell},
     collections::HashMap,
     fmt::Debug,
-    rc::Rc,
+    sync::{Arc, RwLock, RwLockReadGuard},
 };
 
 use crate::{
@@ -39,7 +38,7 @@ impl<T: Debug> ScoreCalculator<T, BM25TermCalculations> for BM25 {
         &mut self,
         term_expansion: &TermData,
         document_frequency: usize,
-        documents: &HashMap<T, Rc<RefCell<DocumentDetails<T>>>>,
+        documents: &HashMap<T, Arc<RwLock<DocumentDetails<T>>>>,
     ) -> Option<BM25TermCalculations> {
         Some(BM25TermCalculations {
             expansion_boost: {
@@ -65,7 +64,7 @@ impl<T: Debug> ScoreCalculator<T, BM25TermCalculations> for BM25 {
     fn score(
         &mut self,
         before_output: Option<&BM25TermCalculations>,
-        document_pointer: Ref<DocumentPointer<T>>,
+        document_pointer: RwLockReadGuard<DocumentPointer<T>>,
         field_data: &FieldData,
         _: &TermData,
     ) -> Option<f64> {

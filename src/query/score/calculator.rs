@@ -3,10 +3,9 @@ use crate::{
     query::QueryResult,
 };
 use std::{
-    cell::{Ref, RefCell},
     collections::HashMap,
     fmt::Debug,
-    rc::Rc,
+    sync::{Arc, RwLock, RwLockReadGuard},
 };
 
 pub struct TermData<'a> {
@@ -50,7 +49,7 @@ pub trait ScoreCalculator<T: Debug, M> {
         &mut self,
         term_expansion: &TermData,
         document_frequency: usize,
-        documents: &HashMap<T, Rc<RefCell<DocumentDetails<T>>>>,
+        documents: &HashMap<T, Arc<RwLock<DocumentDetails<T>>>>,
     ) -> Option<M> {
         None
     }
@@ -64,7 +63,7 @@ pub trait ScoreCalculator<T: Debug, M> {
     fn score(
         &mut self,
         before_output: Option<&M>,
-        document_pointer: Ref<DocumentPointer<T>>,
+        document_pointer: RwLockReadGuard<DocumentPointer<T>>,
         field_data: &FieldData,
         term_expansion: &TermData,
     ) -> Option<f64>;

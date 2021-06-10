@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::Mutex};
 
 use probly_search::{
     index::{add_document_to_index, create_index, remove_document_from_index, Index},
@@ -9,32 +9,32 @@ use probly_search::{
     },
 };
 
+#[derive(Clone)]
+struct Doc {
+    id: usize,
+    title: String,
+    description: String,
+}
+
+fn tokenizer(s: &str) -> Vec<String> {
+    s.split(' ')
+        .map(|slice| slice.to_owned())
+        .collect::<Vec<String>>()
+}
+fn title_extract(d: &Doc) -> Option<&str> {
+    Some(d.title.as_str())
+}
+
+fn description_extract(d: &Doc) -> Option<&str> {
+    Some(d.description.as_str())
+}
+
+fn filter(s: &String) -> String {
+    s.to_owned()
+}
+
 #[test]
 pub fn test_add_query_delete_bm25() {
-    #[derive(Clone)]
-    struct Doc {
-        id: usize,
-        title: String,
-        description: String,
-    }
-
-    fn tokenizer(s: &str) -> Vec<String> {
-        s.split(' ')
-            .map(|slice| slice.to_owned())
-            .collect::<Vec<String>>()
-    }
-    fn title_extract(d: &Doc) -> Option<&str> {
-        Some(d.title.as_str())
-    }
-
-    fn description_extract(d: &Doc) -> Option<&str> {
-        Some(d.description.as_str())
-    }
-
-    fn filter(s: &String) -> String {
-        s.to_owned()
-    }
-
     let mut idx: Index<usize> = create_index(2);
 
     let doc_1 = Doc {
@@ -118,30 +118,6 @@ pub fn test_add_query_delete_bm25() {
 
 #[test]
 pub fn test_add_query_delete_zero_to_one() {
-    #[derive(Clone)]
-    struct Doc {
-        id: usize,
-        title: String,
-        description: String,
-    }
-
-    fn tokenizer(s: &str) -> Vec<String> {
-        s.split(' ')
-            .map(|slice| slice.to_owned())
-            .collect::<Vec<String>>()
-    }
-    fn title_extract(d: &Doc) -> Option<&str> {
-        Some(d.title.as_str())
-    }
-
-    fn description_extract(d: &Doc) -> Option<&str> {
-        Some(d.description.as_str())
-    }
-
-    fn filter(s: &String) -> String {
-        s.to_owned()
-    }
-
     let mut idx: Index<usize> = create_index(2);
 
     let doc_1 = Doc {
@@ -214,5 +190,26 @@ pub fn test_add_query_delete_zero_to_one() {
             key: 1,
             score: 0.75
         }
+    );
+}
+
+#[test]
+pub fn it_is_thread_safe() {
+    lazy_static::lazy_static! {
+      static ref IDX: Mutex<Index<usize>> = Mutex::new(create_index(2));
+    }
+    let doc_1 = Doc {
+        id: 0,
+        title: "abc".to_string(),
+        description: "dfg".to_string(),
+    };
+    let mut idx = IDX.lock().unwrap();
+    add_document_to_index(
+        &mut idx,
+        &[title_extract, description_extract],
+        tokenizer,
+        filter,
+        doc_1.id,
+        doc_1.clone(),
     );
 }

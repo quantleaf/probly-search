@@ -96,7 +96,7 @@ impl<T: Debug + Eq + Hash + Clone> ScoreCalculator<T, ZeroToOneBeforeCalculation
     }
 
     fn finalize(&mut self, _: &mut Vec<QueryResult<T>>) {
-        self.visited_terms_by_document = HashMap::new(); // Clear statistics since we might resuse this struct for another query
+        self.visited_terms_by_document = HashMap::new(); // Clear statistics since we might reuse this struct for another query
     }
 }
 

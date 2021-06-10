@@ -3,7 +3,7 @@
 [Latest Version]: https://img.shields.io/crates/v/probly-search.svg
 [crates.io]: https://crates.io/crates/probly-search
 
-A lightweight full-text search library that provides full control over the scoring calculations.
+A lightweight and thread-safe, full-text search library that provides full control over the scoring calculations.
 
 This start initially as a port of the Node library [NDX](https://github.com/ndx-search/ndx).
 

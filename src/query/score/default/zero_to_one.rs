@@ -8,10 +8,10 @@
     -   We want the query term lengths to match the document term lengths
 */
 use std::{
-    cell::Ref,
     collections::{HashMap, HashSet},
     fmt::Debug,
     hash::Hash,
+    sync::RwLockReadGuard,
 };
 
 use crate::{
@@ -37,7 +37,7 @@ impl<T: Debug + Eq + Hash + Clone> ScoreCalculator<T, ZeroToOneBeforeCalculation
     fn score(
         &mut self,
         _: Option<&ZeroToOneBeforeCalculations>,
-        document_pointer: Ref<DocumentPointer<T>>,
+        document_pointer: RwLockReadGuard<DocumentPointer<T>>,
         field_data: &FieldData,
         term_data: &TermData,
     ) -> Option<f64> {
@@ -45,7 +45,7 @@ impl<T: Debug + Eq + Hash + Clone> ScoreCalculator<T, ZeroToOneBeforeCalculation
            To prevent repeating query terms generating higher scores we track and manipulate
            statistics to track whether scoring has happened for a doc with a certain term
         */
-        let key = &document_pointer.details.borrow().key;
+        let key = &document_pointer.details.read().unwrap().key;
         let mut has_key = false;
         let contains_term_on_key = match self.visited_terms_by_document.get(&key) {
             Some(terms) => {
@@ -96,7 +96,7 @@ impl<T: Debug + Eq + Hash + Clone> ScoreCalculator<T, ZeroToOneBeforeCalculation
     }
 
     fn finalize(&mut self, _: &mut Vec<QueryResult<T>>) {
-        self.visited_terms_by_document = HashMap::new(); // Clear statistics since we might resuse this struct for another query
+        self.visited_terms_by_document = HashMap::new(); // Clear statistics since we might reuse this struct for another query
     }
 }
 
@@ -106,12 +106,12 @@ mod tests {
     use super::*;
     use crate::{
         index::Index,
-        test_util::{build_index, test_score},
+        test_util::{build_test_index, test_score},
     };
 
     #[test]
     fn it_should_perform_partial_matching() {
-        let mut idx: Index<usize> = build_index(&[&"abc", &"abcefg"]);
+        let mut idx: Index<usize> = build_test_index(&["abc", "abcefg"]);
         test_score(
             &mut idx,
             &mut new(),
@@ -131,7 +131,7 @@ mod tests {
 
     #[test]
     fn it_should_penalize_repeating_query_terms() {
-        let mut idx = build_index(&["abc"]);
+        let mut idx = build_test_index(&["abc"]);
         test_score(
             &mut idx,
             &mut new(),
@@ -145,7 +145,7 @@ mod tests {
 
     #[test]
     fn it_should_not_penalize_repeating_document_terms() {
-        let mut idx = build_index(&["abc abc"]);
+        let mut idx = build_test_index(&["abc abc"]);
         test_score(
             &mut idx,
             &mut new(),
@@ -159,7 +159,7 @@ mod tests {
 
     #[test]
     fn it_should_retrieve_multiple_results() {
-        let mut idx = build_index(&[
+        let mut idx = build_test_index(&[
             "abcdef",
             "abc abcdef",
             "abcdef abcdef",
@@ -198,7 +198,7 @@ mod tests {
 
     #[test]
     fn it_should_retrieve_multiple_results_and_penalize_repeating_query_terms() {
-        let mut idx = build_index(&[
+        let mut idx = build_test_index(&[
             "abcdef",
             "abc abcdef",
             "abcdef abcdef",

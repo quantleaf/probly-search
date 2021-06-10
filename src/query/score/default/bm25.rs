@@ -3,10 +3,9 @@
 */
 
 use std::{
-    cell::{Ref, RefCell},
     collections::HashMap,
     fmt::Debug,
-    rc::Rc,
+    sync::{Arc, RwLock, RwLockReadGuard},
 };
 
 use crate::{
@@ -39,7 +38,7 @@ impl<T: Debug> ScoreCalculator<T, BM25TermCalculations> for BM25 {
         &mut self,
         term_expansion: &TermData,
         document_frequency: usize,
-        documents: &HashMap<T, Rc<RefCell<DocumentDetails<T>>>>,
+        documents: &HashMap<T, Arc<RwLock<DocumentDetails<T>>>>,
     ) -> Option<BM25TermCalculations> {
         Some(BM25TermCalculations {
             expansion_boost: {
@@ -65,7 +64,7 @@ impl<T: Debug> ScoreCalculator<T, BM25TermCalculations> for BM25 {
     fn score(
         &mut self,
         before_output: Option<&BM25TermCalculations>,
-        document_pointer: Ref<DocumentPointer<T>>,
+        document_pointer: RwLockReadGuard<DocumentPointer<T>>,
         field_data: &FieldData,
         _: &TermData,
     ) -> Option<f64> {
@@ -104,11 +103,11 @@ mod tests {
     use crate::{
         index::Index,
         query::QueryResult,
-        test_util::{build_index, test_score},
+        test_util::{build_test_index, test_score},
     };
     #[test]
     fn it_should_return_doc_1() {
-        let mut idx: Index<usize> = build_index(&["a b c", "c d e"]);
+        let mut idx: Index<usize> = build_test_index(&["a b c", "c d e"]);
         test_score(
             &mut idx,
             &mut new(),
@@ -122,7 +121,7 @@ mod tests {
 
     #[test]
     fn it_should_return_doc_1_and_2() {
-        let mut idx: Index<usize> = build_index(&["a b c", "c d e"]);
+        let mut idx: Index<usize> = build_test_index(&["a b c", "c d e"]);
         test_score(
             &mut idx,
             &mut new(),

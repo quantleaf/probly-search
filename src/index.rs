@@ -1,15 +1,14 @@
 use core::panic;
 use std::{
-    cell::RefCell,
     collections::{HashMap, HashSet},
     hash::Hash,
-    rc::Rc,
+    sync::{Arc, RwLock},
     usize,
 };
 
 use crate::utils::{FieldAccessor, Filter, Tokenizer};
 
-/**
+/**s
 Index data structure.
 
 This data structure is optimized for memory consumption and performant mutations during indexing, so it contains only
@@ -18,9 +17,9 @@ basic information.
  */
 pub struct Index<T> {
     /// Additional information about documents.
-    pub docs: HashMap<T, Rc<RefCell<DocumentDetails<T>>>>,
+    pub docs: HashMap<T, Arc<RwLock<DocumentDetails<T>>>>,
     /// Inverted index root node.
-    pub root: Rc<RefCell<InvertedIndexNode<T>>>,
+    pub root: Arc<RwLock<InvertedIndexNode<T>>>,
     /// Additional information about indexed fields in all documents.
     pub fields: Vec<FieldDetails>,
 }
@@ -35,7 +34,7 @@ pub fn create_index<T>(fields_num: usize) -> Index<T> {
     let fields: Vec<FieldDetails> = vec![FieldDetails { sum: 0, avg: 0_f64 }; fields_num];
     Index {
         docs: HashMap::new(),
-        root: Rc::new(RefCell::new(create_inverted_index_node(&0))),
+        root: Arc::new(RwLock::new(create_inverted_index_node(&0))),
         fields,
     }
 }
@@ -59,16 +58,16 @@ pub struct DocumentDetails<T> {
 Document pointer contains information about term frequency for a document.
 * typeparam `T` Document key.
 */
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct DocumentPointer<T> {
     /**
     Next DocumentPointer in the intrusive linked list.
      */
-    pub next: Option<Rc<RefCell<DocumentPointer<T>>>>,
+    pub next: Option<Arc<RwLock<DocumentPointer<T>>>>,
     /**
     Reference to a DocumentDetailsobject that is used for this document.
      */
-    pub details: Rc<RefCell<DocumentDetails<T>>>,
+    pub details: Arc<RwLock<DocumentDetails<T>>>,
     /**
     Term frequency in each field.
      */
@@ -80,7 +79,7 @@ Inverted Index Node.
 Inverted index is implemented with a [trie](https://en.wikipedia.org/wiki/Trie) data structure.
  * typeparam `T` Document key.
 */
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct InvertedIndexNode<T> {
     /**
     Char code is used to store keys in the trie data structure.
@@ -89,15 +88,21 @@ pub struct InvertedIndexNode<T> {
     /**
     Next InvertedIndexNode in the intrusive linked list.
      */
-    pub next: Option<Rc<RefCell<InvertedIndexNode<T>>>>,
+    pub next: Option<Arc<RwLock<InvertedIndexNode<T>>>>,
     /**
     Linked list of children {@link InvertedIndexNode}.
      */
-    pub first_child: Option<Rc<RefCell<InvertedIndexNode<T>>>>,
+    pub first_child: Option<Arc<RwLock<InvertedIndexNode<T>>>>,
     /**
     Linked list of documents associated with this node.
      */
-    pub first_doc: Option<Rc<RefCell<DocumentPointer<T>>>>,
+    pub first_doc: Option<Arc<RwLock<DocumentPointer<T>>>>,
+}
+
+impl<T> PartialEq for InvertedIndexNode<T> {
+    fn eq(&self, other: &InvertedIndexNode<T>) -> bool {
+        other.char_code == self.char_code
+    }
 }
 
 /**
@@ -138,9 +143,9 @@ Finds inverted index node that matches the `term`.
 returns Inverted index node that contains `term` or an `undefined` value.
  */
 pub fn find_inverted_index_node<T>(
-    node: Rc<RefCell<InvertedIndexNode<T>>>,
+    node: Arc<RwLock<InvertedIndexNode<T>>>,
     term: &str,
-) -> Option<Rc<RefCell<InvertedIndexNode<T>>>> {
+) -> Option<Arc<RwLock<InvertedIndexNode<T>>>> {
     let chars = term.chars();
     let mut node_iteration = Some(node);
     for char in chars {
@@ -163,19 +168,20 @@ Finds inverted index child node with matching `char`.
 returns Matching InvertedIndexNode or `undefined`.
  */
 fn find_inverted_index_node_child_nodes_by_char_code<T>(
-    node: &Rc<RefCell<InvertedIndexNode<T>>>,
+    node: &Arc<RwLock<InvertedIndexNode<T>>>,
     char_code: u32,
-) -> Option<Rc<RefCell<InvertedIndexNode<T>>>> {
-    let child = &node.borrow().first_child;
+) -> Option<Arc<RwLock<InvertedIndexNode<T>>>> {
+    let node_unwrapped = node.read().unwrap();
+    let child = &node_unwrapped.first_child;
     if child.is_none() {
         return None;
     }
-    let mut iter = Rc::clone(node.borrow().first_child.as_ref().unwrap());
+    let mut iter = Arc::clone(node_unwrapped.first_child.as_ref().unwrap());
     loop {
-        if iter.borrow().char_code == char_code {
-            return Some(Rc::clone(&iter));
+        if iter.read().unwrap().char_code == char_code {
+            return Some(Arc::clone(&iter));
         }
-        let new_iter = iter.borrow().next.as_ref().map(|c| Rc::clone(&c));
+        let new_iter = iter.read().unwrap().next.as_ref().map(|c| Arc::clone(&c));
         match new_iter {
             Some(n) => {
                 iter = n;
@@ -192,16 +198,16 @@ Adds inverted index child node.
  * `child` Child node to add.
  */
 fn add_inverted_index_child_node<T: Clone>(
-    parent: &Rc<RefCell<InvertedIndexNode<T>>>,
-    child: Rc<RefCell<InvertedIndexNode<T>>>,
+    parent: &Arc<RwLock<InvertedIndexNode<T>>>,
+    child: Arc<RwLock<InvertedIndexNode<T>>>,
 ) {
-    //-> Rc<RefCell<InvertedIndexNode<T>>>
-    if let Some(first) = parent.borrow().first_child.clone() {
-        child.borrow_mut().next = Some(first);
+    //-> Arc<RwLock<InvertedIndexNode<T>>>
+    if let Some(first) = parent.read().unwrap().first_child.clone() {
+        child.write().unwrap().next = Some(first);
     }
     //let c=  parent.clone();
-    parent.borrow_mut().first_child = Some(child);
-    //Rc::clone(&parent.borrow().first_child.unwrap())
+    parent.write().unwrap().first_child = Some(child);
+    //Arc::clone(&parent.borrow().first_child.unwrap())
 }
 
 /**
@@ -217,13 +223,13 @@ typeparam `D` Document type.
  * `doc` Document.
  */
 fn add_inverted_index_doc<T: Clone>(
-    node: &Rc<RefCell<InvertedIndexNode<T>>>,
+    node: &Arc<RwLock<InvertedIndexNode<T>>>,
     mut doc: DocumentPointer<T>,
 ) {
-    if let Some(first) = &node.borrow().first_doc {
-        doc.next = Some(Rc::clone(first));
+    if let Some(first) = &node.write().unwrap().first_doc {
+        doc.next = Some(Arc::clone(first));
     }
-    node.borrow_mut().first_doc = Some(Rc::new(RefCell::new(doc)));
+    node.write().unwrap().first_doc = Some(Arc::new(RwLock::new(doc)));
 }
 
 /**
@@ -286,18 +292,18 @@ pub fn add_document_to_index<T: Eq + Hash + Copy, D>(
         }
     }
 
-    let details = Rc::new(RefCell::new(DocumentDetails { key, field_length }));
+    let details = Arc::new(RwLock::new(DocumentDetails { key, field_length }));
 
-    docs.insert(key, Rc::clone(&details));
+    docs.insert(key, Arc::clone(&details));
     for term in all_terms {
-        let mut node = Rc::clone(&index.root);
+        let mut node = Arc::clone(&index.root);
         for (i, char) in term.chars().enumerate() {
-            if node.borrow().first_child.is_none() {
+            if node.read().unwrap().first_child.is_none() {
                 node = create_inverted_index_nodes(node, &term, &i);
                 break;
             }
             let next_node =
-                find_inverted_index_node_child_nodes_by_char_code(&Rc::clone(&node), char as u32);
+                find_inverted_index_node_child_nodes_by_char_code(&Arc::clone(&node), char as u32);
             match next_node {
                 None => {
                     node = create_inverted_index_nodes(node, &term, &i);
@@ -312,7 +318,7 @@ pub fn add_document_to_index<T: Eq + Hash + Copy, D>(
             &node,
             DocumentPointer {
                 next: None,
-                details: Rc::clone(&details),
+                details: Arc::clone(&details),
                 term_frequency: term_counts.get(&term).unwrap().to_owned(),
             },
         )
@@ -329,21 +335,21 @@ Creates inverted index nodes for the `term` starting from the `start` character.
 
  */
 fn create_inverted_index_nodes<T: Clone>(
-    mut parent: Rc<RefCell<InvertedIndexNode<T>>>,
+    mut parent: Arc<RwLock<InvertedIndexNode<T>>>,
     term: &str,
     start: &usize,
-) -> Rc<RefCell<InvertedIndexNode<T>>> {
+) -> Arc<RwLock<InvertedIndexNode<T>>> {
     for (i, char) in term.chars().enumerate() {
         if &i < start {
             continue;
         }
         let new_node: InvertedIndexNode<T> = create_inverted_index_node(&(char as u32));
-        add_inverted_index_child_node(&parent, Rc::new(RefCell::new(new_node)));
-        let new_parent = match &parent.borrow().first_child {
+        add_inverted_index_child_node(&parent, Arc::new(RwLock::new(new_node)));
+        let new_parent = match &parent.read().unwrap().first_child {
             None => {
                 panic!();
             }
-            Some(x) => Rc::clone(x),
+            Some(x) => Arc::clone(x),
         };
         parent = new_parent;
     }
@@ -369,7 +375,7 @@ pub fn remove_document_from_index<T: Hash + Eq + Copy>(
     let mut remove_key = false;
     if let Some(doc_details) = doc_details_option {
         removed.insert((&key).to_owned());
-        let details = &doc_details.borrow();
+        let details = &doc_details.read().unwrap();
         remove_key = true;
         let new_len = (index.docs.len() - 1) as f64;
         for i in 0..fields.len() {
@@ -393,7 +399,7 @@ pub fn remove_document_from_index<T: Hash + Eq + Copy>(
 Cleans up removed documents from the {@link Index}.
 */
 pub fn vacuum_index<T: Hash + Eq>(index: &Index<T>, removed: &mut HashSet<T>) {
-    vacuum_node(Rc::clone(&index.root), removed);
+    vacuum_node(Arc::clone(&index.root), removed);
     removed.clear();
 }
 
@@ -404,52 +410,53 @@ Recursively cleans up removed documents from the index.
  * `removed` Set of removed document ids.
 */
 fn vacuum_node<T: Hash + Eq>(
-    node: Rc<RefCell<InvertedIndexNode<T>>>,
+    node: Arc<RwLock<InvertedIndexNode<T>>>,
     removed: &mut HashSet<T>,
 ) -> usize {
-    let mut prev_pointer: Option<Rc<RefCell<DocumentPointer<T>>>> = None;
-    let mut pointer_option = (&node.borrow().first_doc).clone();
+    let mut prev_pointer: Option<Arc<RwLock<DocumentPointer<T>>>> = None;
+    let mut pointer_option = (&node.write().unwrap().first_doc).clone();
     while let Some(pointer) = pointer_option {
-        let pb = &pointer.borrow();
-        if removed.contains(&pb.details.borrow().key) {
+        let pb = &pointer.read().unwrap();
+        if removed.contains(&pb.details.read().unwrap().key) {
             match &prev_pointer {
                 None => {
-                    node.borrow_mut().first_doc = pb.next.clone();
+                    node.write().unwrap().first_doc = pb.next.clone();
                 }
                 Some(prev) => {
-                    prev.borrow_mut().next = pb.next.clone();
+                    prev.write().unwrap().next = pb.next.clone();
                 }
             }
         } else {
             prev_pointer = Some((&pointer).clone());
         }
-        pointer_option = (&pointer.borrow().next).clone();
+        pointer_option = (&pb.next).clone();
     }
 
-    let mut prev_child: Option<Rc<RefCell<InvertedIndexNode<T>>>> = None;
+    let mut prev_child: Option<Arc<RwLock<InvertedIndexNode<T>>>> = None;
     let mut ret = 0;
-    if node.borrow().first_doc.is_some() {
+    if node.read().unwrap().first_doc.is_some() {
         ret = 1;
     }
 
-    let mut child_option = (&node.borrow().first_child).clone();
+    let mut child_option = (&node.read().unwrap().first_child).clone();
     while let Some(child) = child_option {
-        let r = vacuum_node(Rc::clone(&child), removed);
+        let r = vacuum_node(Arc::clone(&child), removed);
         ret |= r;
+        let child_unwrapped = child.read().unwrap();
         if r == 0 {
             // subtree doesn't have any documents, remove this node
             match &prev_child {
                 Some(prev) => {
-                    prev.borrow_mut().next = child.borrow().next.clone();
+                    prev.write().unwrap().next = child_unwrapped.next.clone();
                 }
                 None => {
-                    node.borrow_mut().first_child = child.borrow().next.clone();
+                    node.write().unwrap().first_child = child_unwrapped.next.clone();
                 }
             }
         } else {
-            prev_child = Some(Rc::clone(&child));
+            prev_child = Some(Arc::clone(&child));
         }
-        child_option = (&child.borrow().next).clone();
+        child_option = (&child_unwrapped.next).clone();
     }
     ret
 }
@@ -499,28 +506,34 @@ mod tests {
                 field_length: vec![3],
                 key: 1 as usize,
             };
-            assert_eq!(&*added_doc.borrow(), &e);
+            assert_eq!(&*added_doc.read().unwrap(), &e);
             assert_eq!(index.fields[0], FieldDetails { avg: 3_f64, sum: 3 });
-            let root = &index.root.borrow();
+            let root = &index.root.read().unwrap();
             assert_eq!(&root.char_code, &0);
             assert_eq!(&root.next.is_none(), &true);
             assert_eq!(&root.first_doc.is_none(), &true);
 
-            let first_child = &root.first_child.as_ref().unwrap().borrow();
+            let first_child = &root.first_child.as_ref().unwrap().read().unwrap();
             assert_eq!(&first_child.char_code, &(99 as u32));
             assert_eq!(&first_child.first_child.is_none(), &true);
 
-            let first_child_next = &first_child.next.as_ref().unwrap().borrow();
+            let first_child_next = &first_child.next.as_ref().unwrap().read().unwrap();
             assert_eq!(&first_child_next.char_code, &(98 as u32));
             assert_eq!(&first_child.first_child.is_none(), &true);
-            let first_child_first_doc = &first_child.first_doc.as_ref().unwrap().borrow();
+            let first_child_first_doc = &first_child.first_doc.as_ref().unwrap().read().unwrap();
             assert_eq!(&first_child_first_doc.term_frequency, &vec![1 as usize]);
-            assert_eq!(&*first_child_first_doc.details.borrow(), &e);
+            assert_eq!(&*first_child_first_doc.details.read().unwrap(), &e);
             assert_eq!(&first_child_first_doc.next.is_none(), &true);
             assert_eq!(&first_child_first_doc.next.is_none(), &true);
 
             assert_eq!(
-                &first_child_next.next.as_ref().unwrap().borrow().char_code,
+                &first_child_next
+                    .next
+                    .as_ref()
+                    .unwrap()
+                    .read()
+                    .unwrap()
+                    .char_code,
                 &(97 as u32)
             );
 
@@ -560,35 +573,35 @@ mod tests {
             );
             assert_eq!(index.docs.len(), 2);
             assert_eq!(
-                &*index.docs.get(&doc_1.id).as_ref().unwrap().borrow(),
+                &*index.docs.get(&doc_1.id).as_ref().unwrap().read().unwrap(),
                 &DocumentDetails {
                     field_length: vec![3],
                     key: 1 as usize
                 }
             );
             assert_eq!(
-                &*index.docs.get(&doc_2.id).as_ref().unwrap().borrow(),
+                &*index.docs.get(&doc_2.id).as_ref().unwrap().read().unwrap(),
                 &DocumentDetails {
                     field_length: vec![3],
                     key: 2 as usize
                 }
             );
             assert_eq!(index.fields[0], FieldDetails { avg: 3_f64, sum: 6 });
-            let root = &index.root.borrow();
+            let root = &index.root.read().unwrap();
             assert_eq!(&root.char_code, &0);
             assert_eq!(&root.next.is_none(), &true);
             assert_eq!(&root.first_doc.is_none(), &true);
 
-            let first_child = &root.first_child.as_ref().unwrap().borrow();
+            let first_child = &root.first_child.as_ref().unwrap().read().unwrap();
             assert_eq!(&first_child.char_code, &(100 as u32));
             assert_eq!(&first_child.first_child.is_none(), &true);
 
-            let first_child_next = &first_child.next.as_ref().unwrap().borrow();
+            let first_child_next = &first_child.next.as_ref().unwrap().read().unwrap();
             assert_eq!(&first_child_next.char_code, &(99 as u32));
             assert_eq!(&first_child.first_child.is_none(), &true);
-            let nested_next = first_child_next.next.as_ref().unwrap().borrow();
+            let nested_next = first_child_next.next.as_ref().unwrap().read().unwrap();
             assert_eq!(&nested_next.char_code, &(98 as u32));
-            let nested_nested_next = &nested_next.next.as_ref().unwrap().borrow();
+            let nested_nested_next = &nested_next.next.as_ref().unwrap().read().unwrap();
             assert_eq!(&nested_nested_next.char_code, &(97 as u32));
 
             // dont test all the properties
@@ -611,13 +624,14 @@ mod tests {
             }
             remove_document_from_index(&mut idx, &mut removed, 1);
             vacuum_index(&mut idx, &mut removed);
+
             assert_eq!(idx.docs.len(), 0);
             assert_eq!(idx.fields.len(), 1);
             assert_eq!(idx.fields.get(0).unwrap().sum, 0);
             assert_eq!(idx.fields.get(0).unwrap().avg.is_nan(), true);
 
             assert_eq!(
-                *idx.root.borrow(),
+                *idx.root.read().unwrap(),
                 InvertedIndexNode {
                     char_code: 0,
                     first_child: None,
@@ -630,9 +644,9 @@ mod tests {
     mod find {
         use super::*;
 
-        fn create(char: u32) -> Rc<RefCell<InvertedIndexNode<String>>> {
+        fn create(char: u32) -> Arc<RwLock<InvertedIndexNode<String>>> {
             let node: InvertedIndexNode<String> = create_inverted_index_node(&char);
-            Rc::new(RefCell::new(node))
+            Arc::new(RwLock::new(node))
         }
 
         mod char_code {
@@ -650,19 +664,21 @@ mod tests {
                 let p = create(0);
                 let c1 = create(1);
                 let c2 = create(2);
-                add_inverted_index_child_node(&p, Rc::clone(&c1));
-                add_inverted_index_child_node(&p, Rc::clone(&c2));
+                add_inverted_index_child_node(&p, Arc::clone(&c1));
+                add_inverted_index_child_node(&p, Arc::clone(&c2));
                 assert_eq!(
                     *find_inverted_index_node_child_nodes_by_char_code(&p, 1)
                         .unwrap()
-                        .borrow(),
-                    *c1.borrow()
+                        .read()
+                        .unwrap(),
+                    *c1.read().unwrap()
                 );
                 assert_eq!(
                     *find_inverted_index_node_child_nodes_by_char_code(&p, 2)
                         .unwrap()
-                        .borrow(),
-                    *c2.borrow()
+                        .read()
+                        .unwrap(),
+                    *c2.read().unwrap()
                 );
             }
         }
@@ -675,14 +691,15 @@ mod tests {
                 let a = create(97);
                 let b = create(98);
                 let c = create(99);
-                add_inverted_index_child_node(&p, Rc::clone(&a));
-                add_inverted_index_child_node(&a, Rc::clone(&b));
-                add_inverted_index_child_node(&b, Rc::clone(&c));
+                add_inverted_index_child_node(&p, Arc::clone(&a));
+                add_inverted_index_child_node(&a, Arc::clone(&b));
+                add_inverted_index_child_node(&b, Arc::clone(&c));
                 assert_eq!(
                     *find_inverted_index_node(p, &"abc".to_string())
                         .unwrap()
-                        .borrow(),
-                    *c.borrow()
+                        .read()
+                        .unwrap(),
+                    *c.read().unwrap()
                 );
             }
         }

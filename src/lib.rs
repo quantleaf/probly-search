@@ -66,7 +66,7 @@ pub mod test_util {
     /***
         Create a index with docucments with title fields, with increasing ids starting from 0
     */
-    pub fn build_index(titles: &[&str]) -> Index<usize> {
+    pub fn build_test_index(titles: &[&str]) -> Index<usize> {
         let mut idx: Index<usize> = create_index(1);
 
         for (index, title) in titles.iter().enumerate() {

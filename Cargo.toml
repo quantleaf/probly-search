@@ -12,3 +12,6 @@ readme = "README.md"
 keywords = ["search", "query", "bm25","index"]
 categories = ["text-processing"]
 exclude = [".github/**", ".gitignore", ".rustfmt.toml"]
+
+[dev-dependencies]
+lazy_static = "1.4.0"

@@ -103,11 +103,11 @@ mod tests {
     use crate::{
         index::Index,
         query::QueryResult,
-        test_util::{build_index, test_score},
+        test_util::{build_test_index, test_score},
     };
     #[test]
     fn it_should_return_doc_1() {
-        let mut idx: Index<usize> = build_index(&["a b c", "c d e"]);
+        let mut idx: Index<usize> = build_test_index(&["a b c", "c d e"]);
         test_score(
             &mut idx,
             &mut new(),
@@ -121,7 +121,7 @@ mod tests {
 
     #[test]
     fn it_should_return_doc_1_and_2() {
-        let mut idx: Index<usize> = build_index(&["a b c", "c d e"]);
+        let mut idx: Index<usize> = build_test_index(&["a b c", "c d e"]);
         test_score(
             &mut idx,
             &mut new(),

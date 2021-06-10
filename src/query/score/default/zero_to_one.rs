@@ -106,12 +106,12 @@ mod tests {
     use super::*;
     use crate::{
         index::Index,
-        test_util::{build_index, test_score},
+        test_util::{build_test_index, test_score},
     };
 
     #[test]
     fn it_should_perform_partial_matching() {
-        let mut idx: Index<usize> = build_index(&[&"abc", &"abcefg"]);
+        let mut idx: Index<usize> = build_test_index(&["abc", "abcefg"]);
         test_score(
             &mut idx,
             &mut new(),
@@ -131,7 +131,7 @@ mod tests {
 
     #[test]
     fn it_should_penalize_repeating_query_terms() {
-        let mut idx = build_index(&["abc"]);
+        let mut idx = build_test_index(&["abc"]);
         test_score(
             &mut idx,
             &mut new(),
@@ -145,7 +145,7 @@ mod tests {
 
     #[test]
     fn it_should_not_penalize_repeating_document_terms() {
-        let mut idx = build_index(&["abc abc"]);
+        let mut idx = build_test_index(&["abc abc"]);
         test_score(
             &mut idx,
             &mut new(),
@@ -159,7 +159,7 @@ mod tests {
 
     #[test]
     fn it_should_retrieve_multiple_results() {
-        let mut idx = build_index(&[
+        let mut idx = build_test_index(&[
             "abcdef",
             "abc abcdef",
             "abcdef abcdef",
@@ -198,7 +198,7 @@ mod tests {
 
     #[test]
     fn it_should_retrieve_multiple_results_and_penalize_repeating_query_terms() {
-        let mut idx = build_index(&[
+        let mut idx = build_test_index(&[
             "abcdef",
             "abc abcdef",
             "abcdef abcdef",

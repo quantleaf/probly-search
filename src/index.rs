@@ -268,8 +268,8 @@ pub fn add_document_to_index<T: Eq + Hash + Copy, D>(
                 let mut filtered_terms_count = 0;
                 for mut term in terms {
                     term = filter(&term);
-                    all_terms.push(term.to_owned());
                     if term.as_str() != "" {
+                        all_terms.push(term.to_owned());
                         filtered_terms_count += 1;
                         let counts = term_counts.get_mut(&term);
                         match counts {
@@ -605,6 +605,26 @@ mod tests {
             assert_eq!(&nested_nested_next.char_code, &(97 as u32));
 
             // dont test all the properties
+        }
+
+        #[test]
+        fn it_should_ignore_empty_tokens() {
+            let field_accessors: Vec<FieldAccessor<Doc>> =
+                vec![field_accessor as fn(doc: &Doc) -> Option<&str>];
+
+            let mut index = create_index::<usize>(1);
+            let doc_1 = Doc {
+                id: 1,
+                text: "a  b".to_string(), // double space could introduce empty tokens
+            };
+            add_document_to_index(
+                &mut index,
+                &field_accessors,
+                tokenizer,
+                filter,
+                doc_1.id,
+                doc_1.clone(),
+            );
         }
     }
 

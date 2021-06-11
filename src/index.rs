@@ -608,7 +608,7 @@ mod tests {
         }
 
         #[test]
-        fn it_should_empty_tokens() {
+        fn it_should_ignore_empty_tokens() {
             let field_accessors: Vec<FieldAccessor<Doc>> =
                 vec![field_accessor as fn(doc: &Doc) -> Option<&str>];
 

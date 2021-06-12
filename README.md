@@ -7,6 +7,11 @@ A lightweight and thread-safe, full-text search library that provides full contr
 
 This start initially as a port of the Node library [NDX](https://github.com/ndx-search/ndx).
 
+## Demo
+Recipe (title) search with 50k documents.
+
+https://quantleaf.github.io/probly-search-demo/
+
 ## Features 
 - Three ways to do scoring
     -   [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) ranking function to rank matching documents. The same ranking function that is used by default in [Lucene](http://lucene.apache.org/core/) >= 6.0.0.

@@ -6,9 +6,11 @@ use crate::{
     utils::{Filter, Tokenizer},
 };
 use std::{
+    cell::RefCell,
     collections::{HashMap, HashSet},
     fmt::Debug,
     hash::Hash,
+    rc::Rc,
     sync::{Arc, Mutex},
 };
 
@@ -84,34 +86,34 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
             let mut visited_documents_for_term: HashSet<T> = HashSet::new();
             for query_term_expanded in expanded_terms {
                 let term_node_option =
-                    find_inverted_index_node(Arc::clone(&index.root), &query_term_expanded);
+                    find_inverted_index_node(Rc::clone(&index.root), &query_term_expanded);
                 if let Some(term_node) = term_node_option {
-                    let mut term_node_borrowed = term_node.lock().unwrap();
+                    let mut term_node_borrowed = term_node.borrow_mut();
                     let mut new_first_doc = None;
                     let mut assign_new_first_doc = false;
                     let mut document_frequency = 0;
 
                     if let Some(term_node_option_first_doc) = &mut term_node_borrowed.first_doc {
-                        let mut prev_pointer: Option<Arc<Mutex<DocumentPointer<T>>>> = None;
-                        let mut pointer_option = Some(Arc::clone(&term_node_option_first_doc));
+                        let mut prev_pointer: Option<Rc<RefCell<DocumentPointer<T>>>> = None;
+                        let mut pointer_option = Some(Rc::clone(&term_node_option_first_doc));
                         while let Some(pointer) = pointer_option {
                             if removed.is_some() // Cleanup old removed documents while searching. If vaccume after delete, this will have not effect
                                 && removed
                                     .unwrap()
-                                    .contains(&pointer.lock().unwrap().details.lock().unwrap().key)
+                                    .contains(&pointer.borrow().details.borrow().key)
                             {
                                 if let Some(pp) = &prev_pointer {
-                                    pp.lock().unwrap().next = pointer.lock().unwrap().next.clone();
+                                    pp.borrow_mut().next = pointer.borrow().next.clone();
                                 } else {
-                                    new_first_doc = (&pointer.lock().unwrap().next).clone();
+                                    new_first_doc = (&pointer.borrow().next).clone();
                                     assign_new_first_doc = true;
                                     //  term_node_borrowed.first_doc = (&pointer.borrow().next).clone();
                                 }
                             } else {
-                                prev_pointer = Some(Arc::clone(&pointer));
+                                prev_pointer = Some(Rc::clone(&pointer));
                                 document_frequency += 1;
                             }
-                            pointer_option = pointer.lock().unwrap().next.clone();
+                            pointer_option = pointer.borrow().next.clone();
                         }
                     }
 
@@ -132,10 +134,10 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                                 docs,
                             );
 
-                            let mut pointer = Some(Arc::clone(&term_node_option_first_doc));
+                            let mut pointer = Some(Rc::clone(&term_node_option_first_doc));
                             while let Some(p) = pointer {
-                                let pointer_borrowed = p.lock().unwrap();
-                                let details = &pointer_borrowed.details.lock().unwrap();
+                                let pointer_borrowed = p.borrow();
+                                let details = &pointer_borrowed.details.borrow();
                                 let key = &details.key;
                                 if removed.is_none() || !removed.unwrap().contains(&key) {
                                     let score = &score_calculator.score(
@@ -186,7 +188,7 @@ Expands term with all possible combinations.
 returns All terms that starts with `term` string.
  */
 fn expand_term<I: Debug>(index: &Index<I>, term: &str) -> Vec<String> {
-    let node = find_inverted_index_node(Arc::clone(&index.root), term);
+    let node = find_inverted_index_node(Rc::clone(&index.root), term);
     let mut results = Vec::new();
     if let Some(n) = node {
         expand_term_from_node(n, &mut results, term);
@@ -204,23 +206,23 @@ Recursively goes through inverted index nodes and expands term with all possible
  * `term Term.
  */
 fn expand_term_from_node<I: Debug>(
-    node: Arc<Mutex<InvertedIndexNode<I>>>,
+    node: Rc<RefCell<InvertedIndexNode<I>>>,
     results: &mut Vec<String>,
     term: &str,
 ) {
-    if node.lock().unwrap().first_doc.is_some() {
+    if node.borrow().first_doc.is_some() {
         results.push(term.to_owned());
     }
-    let nl = node.lock().unwrap();
+    let nl = node.borrow();
     let mut child = nl.first_child.clone();
     std::mem::drop(nl);
     while let Some(c) = child {
-        let cb = c.lock().unwrap();
+        let cb = c.borrow();
         let mut inter = term.to_owned();
         inter.push(cb.char);
         std::mem::drop(cb);
-        expand_term_from_node(Arc::clone(&c), results, &inter); // String.fromCharCode(child.charCode)
-        child = c.lock().unwrap().next.clone();
+        expand_term_from_node(Rc::clone(&c), results, &inter); // String.fromCharCode(child.charCode)
+        child = c.borrow().next.clone();
     }
 }
 

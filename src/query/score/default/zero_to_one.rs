@@ -8,6 +8,7 @@
     -   We want the query term lengths to match the document term lengths
 */
 use std::{
+    cell::Ref,
     collections::{HashMap, HashSet},
     fmt::Debug,
     hash::Hash,
@@ -37,8 +38,8 @@ impl<T: Debug + Eq + Hash + Clone> ScoreCalculator<T, ZeroToOneBeforeCalculation
     fn score(
         &mut self,
         _: Option<&ZeroToOneBeforeCalculations>,
-        document_pointer: &MutexGuard<DocumentPointer<T>>,
-        document_details: &MutexGuard<DocumentDetails<T>>,
+        document_pointer: &Ref<DocumentPointer<T>>,
+        document_details: &Ref<DocumentDetails<T>>,
         field_data: &FieldData,
         term_data: &TermData,
     ) -> Option<f64> {

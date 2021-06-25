@@ -137,7 +137,6 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                                 let pointer_borrowed = p.lock().unwrap();
                                 let details = &pointer_borrowed.details.lock().unwrap();
                                 let key = &details.key;
-                                std::mem::drop(details);
                                 if removed.is_none() || !removed.unwrap().contains(&key) {
                                     let score = &score_calculator.score(
                                         pre_calculations.as_ref(),

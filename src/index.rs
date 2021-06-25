@@ -488,9 +488,9 @@ pub fn count_nodes<T>(idx: &Index<T>) -> i32 {
         if let Some(next) = &n.next {
             count += count_nodes_recursively(next);
         }
-        return count;
+        count
     }
-    return count_nodes_recursively(&idx.root);
+    count_nodes_recursively(&idx.root)
 }
 
 #[cfg(test)]

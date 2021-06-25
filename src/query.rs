@@ -9,7 +9,7 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
     hash::Hash,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex},
 };
 
 use self::score::calculator::{FieldData, TermData};
@@ -86,24 +86,24 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                 let term_node_option =
                     find_inverted_index_node(Arc::clone(&index.root), &query_term_expanded);
                 if let Some(term_node) = term_node_option {
-                    let mut term_node_borrowed = term_node.write().unwrap();
+                    let mut term_node_borrowed = term_node.lock().unwrap();
                     let mut new_first_doc = None;
                     let mut assign_new_first_doc = false;
                     let mut document_frequency = 0;
 
                     if let Some(term_node_option_first_doc) = &mut term_node_borrowed.first_doc {
-                        let mut prev_pointer: Option<Arc<RwLock<DocumentPointer<T>>>> = None;
+                        let mut prev_pointer: Option<Arc<Mutex<DocumentPointer<T>>>> = None;
                         let mut pointer_option = Some(Arc::clone(&term_node_option_first_doc));
                         while let Some(pointer) = pointer_option {
                             if removed.is_some() // Cleanup old removed documents while searching. If vaccume after delete, this will have not effect
                                 && removed
                                     .unwrap()
-                                    .contains(&pointer.read().unwrap().details.read().unwrap().key)
+                                    .contains(&pointer.lock().unwrap().details.lock().unwrap().key)
                             {
                                 if let Some(pp) = &prev_pointer {
-                                    pp.write().unwrap().next = pointer.read().unwrap().next.clone();
+                                    pp.lock().unwrap().next = pointer.lock().unwrap().next.clone();
                                 } else {
-                                    new_first_doc = (&pointer.read().unwrap().next).clone();
+                                    new_first_doc = (&pointer.lock().unwrap().next).clone();
                                     assign_new_first_doc = true;
                                     //  term_node_borrowed.first_doc = (&pointer.borrow().next).clone();
                                 }
@@ -111,7 +111,7 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                                 prev_pointer = Some(Arc::clone(&pointer));
                                 document_frequency += 1;
                             }
-                            pointer_option = pointer.read().unwrap().next.clone();
+                            pointer_option = pointer.lock().unwrap().next.clone();
                         }
                     }
 
@@ -134,26 +134,21 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
 
                             let mut pointer = Some(Arc::clone(&term_node_option_first_doc));
                             while let Some(p) = pointer {
-                                let pointer_borrowed = p.read().unwrap();
-                                let field_lengths =
-                                    &pointer_borrowed.details.read().unwrap().field_length;
-                                if removed.is_none()
-                                    || !removed
-                                        .unwrap()
-                                        .contains(&pointer_borrowed.details.read().unwrap().key)
-                                {
+                                let pointer_borrowed = p.lock().unwrap();
+                                let details = &pointer_borrowed.details.lock().unwrap();
+                                let key = &details.key;
+                                if removed.is_none() || !removed.unwrap().contains(&key) {
                                     let score = &score_calculator.score(
                                         pre_calculations.as_ref(),
-                                        p.read().unwrap(),
+                                        &pointer_borrowed,
+                                        &details,
                                         &FieldData {
-                                            field_lengths,
                                             fields_boost,
                                             fields,
                                         },
                                         &term_expansion_data,
                                     );
                                     if let Some(s) = score {
-                                        let key = &pointer_borrowed.details.read().unwrap().key;
                                         let new_score = max_score_merger(
                                             s,
                                             scores.get(&key),
@@ -209,20 +204,23 @@ Recursively goes through inverted index nodes and expands term with all possible
  * `term Term.
  */
 fn expand_term_from_node<I: Debug>(
-    node: Arc<RwLock<InvertedIndexNode<I>>>,
+    node: Arc<Mutex<InvertedIndexNode<I>>>,
     results: &mut Vec<String>,
     term: &str,
 ) {
-    if node.read().unwrap().first_doc.is_some() {
+    if node.lock().unwrap().first_doc.is_some() {
         results.push(term.to_owned());
     }
-    let mut child = node.read().unwrap().first_child.clone();
+    let nl = node.lock().unwrap();
+    let mut child = nl.first_child.clone();
+    std::mem::drop(nl);
     while let Some(c) = child {
-        let cb = c.read().unwrap();
+        let cb = c.lock().unwrap();
         let mut inter = term.to_owned();
-        inter.push_str(&String::from(char::from_u32(cb.char_code).unwrap()));
+        inter.push(cb.char);
+        std::mem::drop(cb);
         expand_term_from_node(Arc::clone(&c), results, &inter); // String.fromCharCode(child.charCode)
-        child = cb.next.clone();
+        child = c.lock().unwrap().next.clone();
     }
 }
 

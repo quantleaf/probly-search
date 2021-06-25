@@ -15,3 +15,12 @@ exclude = [".github/**", ".gitignore", ".rustfmt.toml"]
 
 [dev-dependencies]
 lazy_static = "1.4.0"
+rand = "0.8.3"
+time = "*"
+criterion = {version ="0.3" , features  = ["html_reports"]}
+
+
+
+[[bench]]
+name = "test_benchmark"
+harness = false

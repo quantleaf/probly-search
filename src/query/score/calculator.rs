@@ -5,7 +5,7 @@ use crate::{
 use std::{
     collections::HashMap,
     fmt::Debug,
-    sync::{Arc, RwLock, RwLockReadGuard},
+    sync::{Arc, Mutex, MutexGuard},
 };
 
 pub struct TermData<'a> {
@@ -20,9 +20,6 @@ pub struct TermData<'a> {
 }
 
 pub struct FieldData<'a> {
-    // An array that contains number of terms in each indexed text field
-    pub field_lengths: &'a [usize],
-
     /// `fields_boost` expected boost from query arguments
     pub fields_boost: &'a [f64],
 
@@ -49,7 +46,7 @@ pub trait ScoreCalculator<T: Debug, M> {
         &mut self,
         term_expansion: &TermData,
         document_frequency: usize,
-        documents: &HashMap<T, Arc<RwLock<DocumentDetails<T>>>>,
+        documents: &HashMap<T, Arc<Mutex<DocumentDetails<T>>>>,
     ) -> Option<M> {
         None
     }
@@ -63,7 +60,8 @@ pub trait ScoreCalculator<T: Debug, M> {
     fn score(
         &mut self,
         before_output: Option<&M>,
-        document_pointer: RwLockReadGuard<DocumentPointer<T>>,
+        document_pointer: &MutexGuard<DocumentPointer<T>>,
+        document_details: &MutexGuard<DocumentDetails<T>>,
         field_data: &FieldData,
         term_expansion: &TermData,
     ) -> Option<f64>;

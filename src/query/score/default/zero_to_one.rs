@@ -11,11 +11,11 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
     hash::Hash,
-    sync::RwLockReadGuard,
+    sync::MutexGuard,
 };
 
 use crate::{
-    index::DocumentPointer,
+    index::{DocumentDetails, DocumentPointer},
     query::{
         score::calculator::{FieldData, ScoreCalculator, TermData},
         QueryResult,
@@ -37,7 +37,8 @@ impl<T: Debug + Eq + Hash + Clone> ScoreCalculator<T, ZeroToOneBeforeCalculation
     fn score(
         &mut self,
         _: Option<&ZeroToOneBeforeCalculations>,
-        document_pointer: RwLockReadGuard<DocumentPointer<T>>,
+        document_pointer: &MutexGuard<DocumentPointer<T>>,
+        document_details: &MutexGuard<DocumentDetails<T>>,
         field_data: &FieldData,
         term_data: &TermData,
     ) -> Option<f64> {
@@ -45,7 +46,7 @@ impl<T: Debug + Eq + Hash + Clone> ScoreCalculator<T, ZeroToOneBeforeCalculation
            To prevent repeating query terms generating higher scores we track and manipulate
            statistics to track whether scoring has happened for a doc with a certain term
         */
-        let key = &document_pointer.details.read().unwrap().key;
+        let key = &document_details.key;
         let mut has_key = false;
         let contains_term_on_key = match self.visited_terms_by_document.get(&key) {
             Some(terms) => {
@@ -77,15 +78,15 @@ impl<T: Debug + Eq + Hash + Clone> ScoreCalculator<T, ZeroToOneBeforeCalculation
 
         */
         let mut score: f64 = 0_f64;
-        for x in 0..field_data.field_lengths.len() {
+        for x in 0..document_details.field_length.len() {
             let tf = (&document_pointer.term_frequency[x]).to_owned() as f64;
             if tf > 0_f64 {
                 let num_of_terms = term_data.all_query_terms.len() as f64;
                 let term_exp_len = term_data.query_term_expanded.len() as f64;
                 let term_len = term_data.query_term.len() as f64;
-                let field_length = field_data.field_lengths[x];
+                let field_length = document_details.field_length[x];
                 let score_contribution = tf / f64::max(field_length as f64, num_of_terms)
-                    * (1_f64 - f64::abs(term_exp_len - term_len) / (term_exp_len as f64));
+                    * (1_f64 - f64::abs(term_exp_len - term_len) / (term_exp_len));
                 score += score_contribution * field_data.fields_boost[x];
             }
         }

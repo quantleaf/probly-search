@@ -8,7 +8,6 @@ use probly_search::{
         QueryResult,
     },
 };
-
 #[derive(Clone)]
 struct Doc {
     id: usize,

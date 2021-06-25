@@ -5,7 +5,7 @@
 use std::{
     collections::HashMap,
     fmt::Debug,
-    sync::{Arc, RwLock, RwLockReadGuard},
+    sync::{Arc, Mutex, MutexGuard},
 };
 
 use crate::{
@@ -38,7 +38,7 @@ impl<T: Debug> ScoreCalculator<T, BM25TermCalculations> for BM25 {
         &mut self,
         term_expansion: &TermData,
         document_frequency: usize,
-        documents: &HashMap<T, Arc<RwLock<DocumentDetails<T>>>>,
+        documents: &HashMap<T, Arc<Mutex<DocumentDetails<T>>>>,
     ) -> Option<BM25TermCalculations> {
         Some(BM25TermCalculations {
             expansion_boost: {
@@ -64,17 +64,18 @@ impl<T: Debug> ScoreCalculator<T, BM25TermCalculations> for BM25 {
     fn score(
         &mut self,
         before_output: Option<&BM25TermCalculations>,
-        document_pointer: RwLockReadGuard<DocumentPointer<T>>,
+        document_pointer: &MutexGuard<DocumentPointer<T>>,
+        document_details: &MutexGuard<DocumentDetails<T>>,
         field_data: &FieldData,
         _: &TermData,
     ) -> Option<f64> {
         let pre_calculations = &before_output.unwrap(); // it will exist as we need BM25 parameters
         let mut score: f64 = 0_f64;
-        for x in 0..field_data.field_lengths.len() {
+        for x in 0..document_details.field_length.len() {
             let mut tf = (&document_pointer.term_frequency[x]).to_owned() as f64;
             if tf > 0_f64 {
                 // calculating BM25 tf
-                let field_length = &field_data.field_lengths[x];
+                let field_length = &document_details.field_length[x];
                 let field_details = &field_data.fields[x];
                 let avg_field_length = field_details.avg;
                 tf = ((self.bm25k1 + 1_f64) * tf)

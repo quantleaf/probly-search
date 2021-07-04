@@ -15,7 +15,7 @@ exclude = [".github/**", ".gitignore", ".rustfmt.toml"]
 
 [dependencies]
 ghost-cell = "0.2.2"
-typed-arena = "1.7.0"
+typed-arena = "2.0.1"
 
 [dev-dependencies]
 lazy_static = "1.4.0"

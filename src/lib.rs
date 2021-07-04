@@ -5,6 +5,8 @@ pub mod utils;
 #[cfg(test)]
 pub mod test_util {
 
+    use ghost_cell::GhostToken;
+
     use crate::{
         index::{add_document_to_index, create_index, Index},
         query::{query, score::calculator::ScoreCalculator, QueryResult},
@@ -68,14 +70,17 @@ pub mod test_util {
     */
     pub fn build_test_index(titles: &[&str]) -> Index<usize> {
         let mut idx: Index<usize> = create_index(1);
-
-        for (index, title) in titles.iter().enumerate() {
-            let doc = Doc {
-                id: index,
-                title: title.to_string(),
-            };
-            add_document_to_index(&mut idx, &[title_extract], tokenizer, filter, doc.id, doc);
-        }
-        idx
+        GhostToken::new(|token|  
+        {
+            for (index, title) in titles.iter().enumerate() {
+                let doc = Doc {
+                    id: index,
+                    title: title.to_string(),
+                };
+                add_document_to_index(&mut idx, &[title_extract], tokenizer, filter, doc.id, doc, token);
+            }
+            idx
+        })
+        
     }
 }

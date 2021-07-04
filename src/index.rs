@@ -1,14 +1,21 @@
 use core::panic;
 use std::{
-    cell::{Ref, RefCell, RefMut},
+    cell::{Ref, RefMut},
     collections::{HashMap, HashSet},
     hash::Hash,
     rc::Rc,
     usize,
 };
 
+use ghost_cell::{GhostCell, GhostToken};
+use typed_arena::Arena;
+
 use crate::utils::{FieldAccessor, Filter, Tokenizer};
 
+type InvertedIndexNodeRef<'arena, 'id, T> =
+    &'arena GhostCell<'id, InvertedIndexNode<'arena, 'id, T>>;
+
+type DocumentPointerRef<'arena, 'id, T> = &'arena GhostCell<'id, DocumentPointer<'arena, 'id, T>>;
 /**s
 Index data structure.
 
@@ -16,15 +23,15 @@ This data structure is optimized for memory consumption and performant mutations
 basic information.
  * typeparam `T` Document key.
  */
-pub struct Index<T> {
+pub struct Index<'arena, 'id, T> {
     /// Additional information about documents.
-    pub docs: HashMap<T, Rc<RefCell<DocumentDetails<T>>>>,
+    pub docs: HashMap<T, Rc<GhostCell<'id, DocumentDetails<T>>>>,
     /// Inverted index root node.
-    pub root: Rc<RefCell<InvertedIndexNode<T>>>,
+    pub root: GhostCell<'id, InvertedIndexNode<'arena, 'id, T>>,
     /// Additional information about indexed fields in all documents.
     pub fields: Vec<FieldDetails>,
 }
-unsafe impl<T> Send for Index<T> {}
+unsafe impl<'arena, 'id, T> Send for Index<'arena, 'id, T> {}
 
 /**
 Creates an Index.
@@ -32,13 +39,16 @@ Creates an Index.
  * `fieldsNum` Number of fields.
  * returns `Index`
  */
-pub fn create_index<T>(fields_num: usize) -> Index<T> {
+pub fn create_index<'arena, 'id, T>(
+    fields_num: usize,
+    arena: &'arena Arena<InvertedIndexNode<'arena, 'id, T>>,
+) -> Index<'arena, 'id, T> {
     let fields: Vec<FieldDetails> = vec![FieldDetails { sum: 0, avg: 0_f64 }; fields_num];
     Index {
         docs: HashMap::new(),
-        root: Rc::new(RefCell::new(create_inverted_index_node(
-            &char::from_u32(0).unwrap(),
-        ))),
+        root: *GhostCell::from_mut(
+            arena.alloc(create_inverted_index_node(&char::from_u32(0).unwrap())),
+        ),
         fields,
     }
 }
@@ -62,16 +72,15 @@ pub struct DocumentDetails<T> {
 Document pointer contains information about term frequency for a document.
 * typeparam `T` Document key.
 */
-#[derive(Debug)]
-pub struct DocumentPointer<T> {
+pub struct DocumentPointer<'arena, 'id, T> {
     /**
     Next DocumentPointer in the intrusive linked list.
      */
-    pub next: Option<Rc<RefCell<DocumentPointer<T>>>>,
+    pub next: Option<DocumentPointerRef<'arena, 'id, T>>,
     /**
     Reference to a DocumentDetailsobject that is used for this document.
      */
-    pub details: Rc<RefCell<DocumentDetails<T>>>,
+    pub details: GhostCell<'id, DocumentDetails<T>>,
     /**
     Term frequency in each field.
      */
@@ -83,8 +92,7 @@ Inverted Index Node.
 Inverted index is implemented with a [trie](https://en.wikipedia.org/wiki/Trie) data structure.
  * typeparam `T` Document key.
 */
-#[derive(Debug)]
-pub struct InvertedIndexNode<T> {
+pub struct InvertedIndexNode<'arena, 'id, T> {
     /**
     Char code is used to store keys in the trie data structure.
      */
@@ -92,18 +100,18 @@ pub struct InvertedIndexNode<T> {
     /**
     Next InvertedIndexNode in the intrusive linked list.
      */
-    pub next: Option<Rc<RefCell<InvertedIndexNode<T>>>>,
+    pub next: Option<InvertedIndexNodeRef<'arena, 'id, T>>,
     /**
     Linked list of children {@link InvertedIndexNode}.
      */
-    pub first_child: Option<Rc<RefCell<InvertedIndexNode<T>>>>,
+    pub first_child: Option<InvertedIndexNodeRef<'arena, 'id, T>>,
     /**
     Linked list of documents associated with this node.
      */
-    pub first_doc: Option<Rc<RefCell<DocumentPointer<T>>>>,
+    pub first_doc: Option<DocumentPointerRef<'arena, 'id, T>>,
 }
 
-impl<T> PartialEq for InvertedIndexNode<T> {
+impl<'arena, 'id, T> PartialEq for InvertedIndexNode<'arena, 'id, T> {
     fn eq(&self, other: &InvertedIndexNode<T>) -> bool {
         other.char == self.char
     }
@@ -130,13 +138,13 @@ Creates inverted index node.
  * `charCode` Char code.
  returns InvertedIndexNode instance.
  */
-fn create_inverted_index_node<T>(char: &char) -> InvertedIndexNode<T> {
-    InvertedIndexNode {
+fn create_inverted_index_node<'arena, 'id, T>(char: &char) -> InvertedIndexNodeRef<'arena, 'id, T> {
+    &GhostCell::new(InvertedIndexNode {
         char: char.to_owned(),
         next: None,
         first_child: None,
         first_doc: None,
-    }
+    })
 }
 
 /**
@@ -146,17 +154,18 @@ Finds inverted index node that matches the `term`.
  * `term` Term.
 returns Inverted index node that contains `term` or an `undefined` value.
  */
-pub fn find_inverted_index_node<T>(
-    node: Rc<RefCell<InvertedIndexNode<T>>>,
+pub fn find_inverted_index_node<'arena, 'id, T>(
+    node: InvertedIndexNodeRef<'arena, 'id, T>,
     term: &str,
-) -> Option<Rc<RefCell<InvertedIndexNode<T>>>> {
+    token: &GhostToken<'id>,
+) -> Option<InvertedIndexNodeRef<'arena, 'id, T>> {
     let mut node_iteration = Some(node);
     for char in term.chars() {
         if node_iteration.is_none() {
             break;
         }
         node_iteration =
-            find_inverted_index_node_child_nodes_by_char(&node_iteration.unwrap().borrow(), &char);
+            find_inverted_index_node_child_nodes_by_char(node_iteration.unwrap(), &char, token);
     }
     node_iteration
 }
@@ -168,29 +177,24 @@ Finds inverted index child node with matching `char`.
  * `charCode` Char code.
 returns Matching InvertedIndexNode or `undefined`.
  */
-fn find_inverted_index_node_child_nodes_by_char<T>(
-    node_lock: &Ref<InvertedIndexNode<T>>,
+fn find_inverted_index_node_child_nodes_by_char<'arena, 'id, T>(
+    from_node: InvertedIndexNodeRef<'arena, 'id, T>,
     char: &char,
-) -> Option<Rc<RefCell<InvertedIndexNode<T>>>> {
-    let child = &node_lock.first_child;
+    token: &GhostToken<'id>,
+) -> Option<InvertedIndexNodeRef<'arena, 'id, T>> {
+    let child = from_node.borrow(token).first_child;
     if child.is_none() {
         return None;
     }
-    let mut iter = Rc::clone(node_lock.first_child.as_ref().unwrap());
-    loop {
-        iter = {
-            let iter_ref = iter.borrow();
-            if &iter_ref.char == char {
-                return Some(Rc::clone(&iter));
-            }
-            let next_iter = iter_ref.next.as_ref().map(|c| Rc::clone(&c));
-            let new_iter = match next_iter {
-                Some(n) => n,
-                None => return None,
-            };
-            new_iter
-        };
+    let mut iter = child;
+    while let Some(node) = iter {
+        let iter_ref = node.borrow(token);
+        if &iter_ref.char == char {
+            return Some(node);
+        }
+        iter = iter_ref.next
     }
+    return None;
 }
 
 /**
@@ -199,16 +203,17 @@ Adds inverted index child node.
  * `parent` Parent node.
  * `child` Child node to add.
  */
-fn add_inverted_index_child_node<T: Clone>(
-    parent: &mut RefMut<InvertedIndexNode<T>>,
-    child: Rc<RefCell<InvertedIndexNode<T>>>,
+fn add_inverted_index_child_node<'arena, 'id, T: Clone>(
+    parent: InvertedIndexNodeRef<'arena, 'id, T>,
+    child: InvertedIndexNodeRef<'arena, 'id, T>,
+    token: &mut GhostToken<'id>,
 ) {
-    //-> Rc<RefCell<InvertedIndexNode<T>>>
-    if let Some(first) = parent.first_child.clone() {
-        child.borrow_mut().next = Some(first);
+    //-> Rc<GhostCell<'id,InvertedIndexNode<T>>>
+    if let Some(first) = parent.borrow(token).first_child {
+        child.borrow_mut(token).next = Some(first);
     }
     //let c=  parent.clone();
-    parent.first_child = Some(child);
+    parent.borrow_mut(token).first_child = Some(child);
     //Rc::clone(&parent.borrow().first_child.unwrap())
 }
 
@@ -224,15 +229,16 @@ typeparam `D` Document type.
  * `key` Document key.
  * `doc` Document.
  */
-fn add_inverted_index_doc<T: Clone>(
-    node: Rc<RefCell<InvertedIndexNode<T>>>,
-    mut doc: DocumentPointer<T>,
+fn add_inverted_index_doc<'arena, 'id, T: Clone>(
+    node: InvertedIndexNodeRef<'arena, 'id, T>,
+    doc: DocumentPointerRef<'arena, 'id, T>,
+    token: &mut GhostToken<'id>,
 ) {
-    let mut node_locked = node.borrow_mut();
+    let mut node_locked = node.get_mut();
     if let Some(first) = &node_locked.first_doc {
-        doc.next = Some(Rc::clone(first));
+        doc.borrow_mut(token).next = Some(first);
     }
-    node_locked.first_doc = Some(Rc::new(RefCell::new(doc)));
+    node_locked.first_doc = Some(doc);
 }
 
 /**
@@ -242,13 +248,14 @@ Adds a document to the index.
  * `doc` Posting.
 */
 
-pub fn add_document_to_index<T: Eq + Hash + Copy, D>(
+pub fn add_document_to_index<'id, T: Eq + Hash + Copy, D>(
     index: &mut Index<T>,
     field_accessors: &[FieldAccessor<D>],
     tokenizer: Tokenizer,
     filter: Filter,
     key: T,
     doc: D,
+    token: &mut GhostToken<'id>,
 ) {
     let docs = &mut index.docs;
     let fields = &mut index.fields;
@@ -297,20 +304,20 @@ pub fn add_document_to_index<T: Eq + Hash + Copy, D>(
 
     docs.insert(
         key,
-        Rc::new(RefCell::new(DocumentDetails { key, field_length })),
+        Rc::new(GhostCell::new(DocumentDetails { key, field_length })),
     );
     for term in all_terms {
-        let mut node = Rc::clone(&index.root);
+        let mut node = &index.root;
 
         for (i, char) in term.chars().enumerate() {
-            if node.borrow().first_child.is_none() {
-                node = create_inverted_index_nodes(node, &term, &i);
+            if node.borrow(token).first_child.is_none() {
+                node = create_inverted_index_nodes(node, &term, &i, token);
                 break;
             }
-            let next_node = find_inverted_index_node_child_nodes_by_char(&node.borrow(), &char);
+            let next_node = find_inverted_index_node_child_nodes_by_char(&node, &char, token);
             match next_node {
                 None => {
-                    node = create_inverted_index_nodes(node, &term, &i);
+                    node = create_inverted_index_nodes(node, &term, &i, token);
                     break;
                 }
                 Some(n) => {
@@ -322,9 +329,10 @@ pub fn add_document_to_index<T: Eq + Hash + Copy, D>(
             node,
             DocumentPointer {
                 next: None,
-                details: Rc::clone(&Rc::clone(docs.get(&key).unwrap())),
+                details: &GhostCell::new(docs.get(&key)),
                 term_frequency: term_counts[&term].to_owned(),
             },
+            token,
         )
     }
 }
@@ -338,11 +346,12 @@ Creates inverted index nodes for the `term` starting from the `start` character.
  * returns leaf InvertedIndexNode.
 
  */
-fn create_inverted_index_nodes<T: Clone>(
-    mut parent: Rc<RefCell<InvertedIndexNode<T>>>,
+fn create_inverted_index_nodes<'arena, 'id, T: Clone>(
+    mut parent: InvertedIndexNodeRef<'arena, 'id, T>,
     term: &str,
     start: &usize,
-) -> Rc<RefCell<InvertedIndexNode<T>>> {
+    token: &mut GhostToken<'id>,
+) -> InvertedIndexNodeRef<'arena, 'id, T> {
     for (i, char) in term.chars().enumerate() {
         if &i < start {
             continue;
@@ -350,8 +359,8 @@ fn create_inverted_index_nodes<T: Clone>(
         let new_node: InvertedIndexNode<T> = create_inverted_index_node(&char);
         let new_parent;
         let new_parent = {
-            let mut parent_ref = parent.borrow_mut();
-            add_inverted_index_child_node(&mut parent_ref, Rc::new(RefCell::new(new_node)));
+            let mut parent_ref = parent.borrow_mut(token);
+            add_inverted_index_child_node(&mut parent_ref, new_node, token);
             new_parent = match &parent_ref.first_child {
                 None => {
                     panic!();
@@ -418,11 +427,11 @@ Recursively cleans up removed documents from the index.
  * `index` Index.
  * `removed` Set of removed document ids.
 */
-fn vacuum_node<T: Hash + Eq>(
-    node: Rc<RefCell<InvertedIndexNode<T>>>,
+fn vacuum_node<'id, T: Hash + Eq>(
+    node: Rc<GhostCell<'id, InvertedIndexNode<T>>>,
     removed: &mut HashSet<T>,
 ) -> usize {
-    let mut prev_pointer: Option<Rc<RefCell<DocumentPointer<T>>>> = None;
+    let mut prev_pointer: Option<Rc<GhostCell<'id, DocumentPointer<T>>>> = None;
     let mut pointer_option = (&node.borrow().first_doc).clone();
     while let Some(pointer) = pointer_option {
         let pb = &pointer.borrow();
@@ -441,7 +450,7 @@ fn vacuum_node<T: Hash + Eq>(
         pointer_option = (&pb.next).clone();
     }
 
-    let mut prev_child: Option<Rc<RefCell<InvertedIndexNode<T>>>> = None;
+    let mut prev_child: Option<Rc<GhostCell<'id, InvertedIndexNode<T>>>> = None;
     let mut ret = 0;
     if node.borrow().first_doc.is_some() {
         ret = 1;
@@ -474,8 +483,8 @@ fn vacuum_node<T: Hash + Eq>(
     Count the amount of nodes of the index.
     returns the amount, including root node. Which means count will alway be greater than 0
 */
-pub fn count_nodes<T>(idx: &Index<T>) -> i32 {
-    fn count_nodes_recursively<T>(node: &Rc<RefCell<InvertedIndexNode<T>>>) -> i32 {
+pub fn count_nodes<'id, T>(idx: &Index<T>) -> i32 {
+    fn count_nodes_recursively<'id, T>(node: &Rc<GhostCell<'id, InvertedIndexNode<T>>>) -> i32 {
         let mut count = 1;
         let n = node.borrow();
         if let Some(first) = &n.first_child {
@@ -685,11 +694,16 @@ mod tests {
     }
     mod find {
 
+        use ghost_cell::GhostToken;
+
         use super::*;
 
-        fn create(char: char) -> Rc<RefCell<InvertedIndexNode<String>>> {
+        fn create(
+            char: char,
+            token: &GhostToken<'id>,
+        ) -> Rc<GhostCell<'id, InvertedIndexNode<String>>> {
             let node: InvertedIndexNode<String> = create_inverted_index_node(&char);
-            Rc::new(RefCell::new(node))
+            Rc::new(GhostCell::new(node))
         }
 
         mod char_code {

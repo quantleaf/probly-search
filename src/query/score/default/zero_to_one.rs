@@ -38,8 +38,8 @@ impl<T: Debug + Eq + Hash + Clone> ScoreCalculator<T, ZeroToOneBeforeCalculation
     fn score(
         &mut self,
         _: Option<&ZeroToOneBeforeCalculations>,
-        document_pointer: &Ref<DocumentPointer<T>>,
-        document_details: &Ref<DocumentDetails<T>>,
+        document_pointer: &DocumentPointer<T>,
+        document_details: &DocumentDetails<T>,
         field_data: &FieldData,
         term_data: &TermData,
     ) -> Option<f64> {

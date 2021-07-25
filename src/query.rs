@@ -1,5 +1,7 @@
 pub mod score;
 
+use ghost_cell::GhostToken;
+
 use crate::{
     index::*,
     query::score::calculator::ScoreCalculator,
@@ -66,14 +68,15 @@ Arguments
 
 returns Array of QueryResult structs
 */
-pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
-    index: &mut Index<T>,
+pub fn query<'arena, 'idx, 'idn, T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
+    index: &mut Index<'arena, 'idx, 'idn, T>,
     query: &str,
     score_calculator: &mut S,
     tokenizer: Tokenizer,
     filter: Filter,
     fields_boost: &[f64],
     removed: Option<&HashSet<T>>,
+    mut token: &mut GhostToken<'idx>,
 ) -> Vec<QueryResult<T>> {
     let docs = &index.docs;
     let fields = &index.fields;
@@ -82,38 +85,38 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
     for query_term_pre_filter in &query_terms {
         let query_term = filter(&query_term_pre_filter);
         if !query_term.is_empty() {
-            let expanded_terms = expand_term(&index, &query_term);
+            let expanded_terms = expand_term(&index, &query_term, &token);
             let mut visited_documents_for_term: HashSet<T> = HashSet::new();
             for query_term_expanded in expanded_terms {
                 let term_node_option =
-                    find_inverted_index_node(Rc::clone(&index.root), &query_term_expanded);
+                    find_inverted_index_node(&index.root.unwrap(), &query_term_expanded, &token);
                 if let Some(term_node) = term_node_option {
-                    let mut term_node_borrowed = term_node.borrow_mut();
+                    let mut term_node_borrowed = term_node.borrow_mut(&mut token);
                     let mut new_first_doc = None;
                     let mut assign_new_first_doc = false;
                     let mut document_frequency = 0;
 
-                    if let Some(term_node_option_first_doc) = &mut term_node_borrowed.first_doc {
-                        let mut prev_pointer: Option<Rc<RefCell<DocumentPointer<T>>>> = None;
-                        let mut pointer_option = Some(Rc::clone(&term_node_option_first_doc));
+                    if let Some(term_node_option_first_doc) = term_node_borrowed.first_doc {
+                        let mut prev_pointer: Option<DocumentPointerRef<'arena, 'idn, T>> = None;
+                        let mut pointer_option = Some(term_node_option_first_doc);
                         while let Some(pointer) = pointer_option {
                             if removed.is_some() // Cleanup old removed documents while searching. If vaccume after delete, this will have not effect
                                 && removed
                                     .unwrap()
-                                    .contains(&pointer.borrow().details.borrow().key)
+                                    .contains(&pointer.borrow(&token).details_key)
                             {
                                 if let Some(pp) = &prev_pointer {
-                                    pp.borrow_mut().next = pointer.borrow().next.clone();
+                                    pp.borrow_mut(&mut token).next = pointer.borrow(&token).next;
                                 } else {
-                                    new_first_doc = (&pointer.borrow().next).clone();
+                                    new_first_doc = pointer.borrow(&token).next;
                                     assign_new_first_doc = true;
-                                    //  term_node_borrowed.first_doc = (&pointer.borrow().next).clone();
+                                    //  term_node_borrowed.first_doc = (&pointer.borrow(&token).next).clone();
                                 }
                             } else {
-                                prev_pointer = Some(Rc::clone(&pointer));
+                                prev_pointer = Some(&pointer);
                                 document_frequency += 1;
                             }
-                            pointer_option = pointer.borrow().next.clone();
+                            pointer_option = pointer.borrow(&token).next;
                         }
                     }
 
@@ -121,7 +124,7 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                         term_node_borrowed.first_doc = new_first_doc;
                     }
 
-                    if let Some(term_node_option_first_doc) = &mut term_node_borrowed.first_doc {
+                    if let Some(term_node_option_first_doc) = term_node_borrowed.first_doc {
                         if document_frequency > 0 {
                             let term_expansion_data = TermData {
                                 all_query_terms: &query_terms,
@@ -134,16 +137,15 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                                 docs,
                             );
 
-                            let mut pointer = Some(Rc::clone(&term_node_option_first_doc));
+                            let mut pointer = Some(term_node_option_first_doc);
                             while let Some(p) = pointer {
-                                let pointer_borrowed = p.borrow();
-                                let details = &pointer_borrowed.details.borrow();
-                                let key = &details.key;
+                                let pointer_borrowed = p.borrow(&token);
+                                let key = &pointer_borrowed.details_key;
                                 if removed.is_none() || !removed.unwrap().contains(&key) {
                                     let score = &score_calculator.score(
                                         pre_calculations.as_ref(),
                                         &pointer_borrowed,
-                                        &details,
+                                        index.docs.get(key).unwrap(),
                                         &FieldData {
                                             fields_boost,
                                             fields,
@@ -160,7 +162,7 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                                         visited_documents_for_term.insert(key.to_owned());
                                     }
                                 }
-                                pointer = pointer_borrowed.next.clone();
+                                pointer = pointer_borrowed.next;
                             }
                         }
                     }
@@ -187,11 +189,15 @@ Expands term with all possible combinations.
  * `term` Term.
 returns All terms that starts with `term` string.
  */
-fn expand_term<I: Debug>(index: &Index<I>, term: &str) -> Vec<String> {
-    let node = find_inverted_index_node(Rc::clone(&index.root), term);
+fn expand_term<'arena, 'idx, 'idn, I: Debug>(
+    index: &Index<'arena, 'idx, 'idn, I>,
+    term: &str,
+    token: &GhostToken<'idx>,
+) -> Vec<String> {
+    let node = find_inverted_index_node(&index.root.unwrap(), term, &token);
     let mut results = Vec::new();
     if let Some(n) = node {
-        expand_term_from_node(n, &mut results, term);
+        expand_term_from_node(n, &mut results, term, &token);
     }
 
     results
@@ -205,24 +211,24 @@ Recursively goes through inverted index nodes and expands term with all possible
  * `results Results.
  * `term Term.
  */
-fn expand_term_from_node<I: Debug>(
-    node: Rc<RefCell<InvertedIndexNode<I>>>,
+fn expand_term_from_node<'arena, 'idx, 'idn, I: Debug>(
+    node: InvertedIndexNodeRef<'arena, 'idx, 'idn, I>,
     results: &mut Vec<String>,
     term: &str,
+    token: &GhostToken<'idx>,
 ) {
-    if node.borrow().first_doc.is_some() {
+    if node.borrow(&token).first_doc.is_some() {
         results.push(term.to_owned());
     }
-    let nl = node.borrow();
-    let mut child = nl.first_child.clone();
-    std::mem::drop(nl);
+    let nl = node.borrow(&token);
+    let mut child = nl.first_child;
     while let Some(c) = child {
-        let cb = c.borrow();
+        let cb = c.borrow(&token);
         let mut inter = term.to_owned();
         inter.push(cb.char);
         std::mem::drop(cb);
-        expand_term_from_node(Rc::clone(&c), results, &inter); // String.fromCharCode(child.charCode)
-        child = c.borrow().next.clone();
+        expand_term_from_node(&c, results, &inter, &token); // String.fromCharCode(child.charCode)
+        child = c.borrow(&token).next;
     }
 }
 
@@ -266,245 +272,265 @@ mod tests {
 
         #[test]
         fn it_should_return_doc_1() {
-            let mut idx: Index<usize> = create_index(2);
-            let docs = vec![
-                Doc {
-                    id: 1,
-                    title: "a b c".to_string(),
-                    text: "hello world".to_string(),
-                },
-                Doc {
-                    id: 2,
-                    title: "c d e".to_string(),
-                    text: "lorem ipsum".to_string(),
-                },
-            ];
-            for doc in docs {
-                add_document_to_index(
+            GhostToken::new(|token| {
+                let mut idx: Index<usize> = create_index(2);
+                let docs = vec![
+                    Doc {
+                        id: 1,
+                        title: "a b c".to_string(),
+                        text: "hello world".to_string(),
+                    },
+                    Doc {
+                        id: 2,
+                        title: "c d e".to_string(),
+                        text: "lorem ipsum".to_string(),
+                    },
+                ];
+                for doc in docs {
+                    add_document_to_index(
+                        &mut idx,
+                        &[title_extract, text_extract],
+                        tokenizer,
+                        filter,
+                        doc.id,
+                        doc,
+                        &mut token,
+                    );
+                }
+                let result = query(
                     &mut idx,
-                    &[title_extract, text_extract],
+                    &"a".to_string(),
+                    &mut crate::query::score::default::bm25::new(),
                     tokenizer,
                     filter,
-                    doc.id,
-                    doc,
+                    &vec![1., 1.],
+                    None,
+                    &mut token,
                 );
-            }
-            let result = query(
-                &mut idx,
-                &"a".to_string(),
-                &mut crate::query::score::default::bm25::new(),
-                tokenizer,
-                filter,
-                &vec![1., 1.],
-                None,
-            );
-            assert_eq!(result.len(), 1);
-            assert_eq!(
-                approx_equal(result.get(0).unwrap().score, 0.6931471805599453, 8),
-                true
-            );
-            assert_eq!(result.get(0).unwrap().key, 1);
+                assert_eq!(result.len(), 1);
+                assert_eq!(
+                    approx_equal(result.get(0).unwrap().score, 0.6931471805599453, 8),
+                    true
+                );
+                assert_eq!(result.get(0).unwrap().key, 1);
+            })
         }
 
         #[test]
         fn it_should_return_doc_1_and_2() {
-            let mut idx: Index<usize> = create_index(2);
-            let docs = vec![
-                Doc {
-                    id: 1,
-                    title: "a b c".to_string(),
-                    text: "hello world".to_string(),
-                },
-                Doc {
-                    id: 2,
-                    title: "c d e".to_string(),
-                    text: "lorem ipsum".to_string(),
-                },
-            ];
+            GhostToken::new(|token| {
+                let mut idx: Index<usize> = create_index(2);
+                let docs = vec![
+                    Doc {
+                        id: 1,
+                        title: "a b c".to_string(),
+                        text: "hello world".to_string(),
+                    },
+                    Doc {
+                        id: 2,
+                        title: "c d e".to_string(),
+                        text: "lorem ipsum".to_string(),
+                    },
+                ];
 
-            for doc in docs {
-                add_document_to_index(
+                for doc in docs {
+                    add_document_to_index(
+                        &mut idx,
+                        &[title_extract, text_extract],
+                        tokenizer,
+                        filter,
+                        doc.id,
+                        doc,
+                        &mut token,
+                    );
+                }
+
+                let result = query(
                     &mut idx,
-                    &[title_extract, text_extract],
+                    &"c".to_string(),
+                    &mut crate::query::score::default::bm25::new(),
                     tokenizer,
                     filter,
-                    doc.id,
-                    doc,
+                    &vec![1., 1.],
+                    None,
+                    &mut token,
                 );
-            }
-
-            let result = query(
-                &mut idx,
-                &"c".to_string(),
-                &mut crate::query::score::default::bm25::new(),
-                tokenizer,
-                filter,
-                &vec![1., 1.],
-                None,
-            );
-            assert_eq!(result.len(), 2);
-            assert_eq!(
-                approx_equal(result.get(0).unwrap().score, 0.1823215567939546, 8),
-                true
-            );
-            assert_eq!(
-                result.get(0).unwrap().key == 1 || result.get(0).unwrap().key == 2,
-                true
-            );
-            assert_eq!(
-                approx_equal(result.get(1).unwrap().score, 0.1823215567939546, 8),
-                true
-            );
-            assert_eq!(
-                result.get(1).unwrap().key == 1 || result.get(1).unwrap().key == 2,
-                true
-            );
-            assert_ne!(result.get(0).unwrap().key, result.get(1).unwrap().key);
+                assert_eq!(result.len(), 2);
+                assert_eq!(
+                    approx_equal(result.get(0).unwrap().score, 0.1823215567939546, 8),
+                    true
+                );
+                assert_eq!(
+                    result.get(0).unwrap().key == 1 || result.get(0).unwrap().key == 2,
+                    true
+                );
+                assert_eq!(
+                    approx_equal(result.get(1).unwrap().score, 0.1823215567939546, 8),
+                    true
+                );
+                assert_eq!(
+                    result.get(1).unwrap().key == 1 || result.get(1).unwrap().key == 2,
+                    true
+                );
+                assert_ne!(result.get(0).unwrap().key, result.get(1).unwrap().key);
+            })
         }
 
         #[test]
         fn it_should_match_text_by_expanding() {
-            let mut idx: Index<usize> = create_index(2);
-            let docs = vec![
-                Doc {
-                    id: 1,
-                    title: "a b c".to_string(),
-                    text: "hello world".to_string(),
-                },
-                Doc {
-                    id: 2,
-                    title: "c d e".to_string(),
-                    text: "lorem ipsum".to_string(),
-                },
-            ];
+            GhostToken::new(|token| {
+                let mut idx: Index<usize> = create_index(2);
+                let docs = vec![
+                    Doc {
+                        id: 1,
+                        title: "a b c".to_string(),
+                        text: "hello world".to_string(),
+                    },
+                    Doc {
+                        id: 2,
+                        title: "c d e".to_string(),
+                        text: "lorem ipsum".to_string(),
+                    },
+                ];
 
-            for doc in docs {
-                add_document_to_index(
+                for doc in docs {
+                    add_document_to_index(
+                        &mut idx,
+                        &[title_extract, text_extract],
+                        tokenizer,
+                        filter,
+                        doc.id,
+                        doc,
+                        &mut token,
+                    );
+                }
+
+                let result = query(
                     &mut idx,
-                    &[title_extract, text_extract],
+                    &"h".to_string(),
+                    &mut crate::query::score::default::bm25::new(),
                     tokenizer,
                     filter,
-                    doc.id,
-                    doc,
+                    &vec![1., 1.],
+                    None,
+                    &mut token,
                 );
-            }
-
-            let result = query(
-                &mut idx,
-                &"h".to_string(),
-                &mut crate::query::score::default::bm25::new(),
-                tokenizer,
-                filter,
-                &vec![1., 1.],
-                None,
-            );
-            assert_eq!(result.len(), 1);
-            assert_eq!(
-                approx_equal(result.get(0).unwrap().score, 0.12637567304702957, 8),
-                true
-            );
-            assert_eq!(result.get(0).unwrap().key, 1);
+                assert_eq!(result.len(), 1);
+                assert_eq!(
+                    approx_equal(result.get(0).unwrap().score, 0.12637567304702957, 8),
+                    true
+                );
+                assert_eq!(result.get(0).unwrap().key, 1);
+            });
         }
 
         #[test]
         fn it_should_use_filter_for_query() {
-            let mut idx: Index<usize> = create_index(2);
-            let docs = vec![
-                Doc {
-                    id: 1,
-                    title: "a b c".to_string(),
-                    text: "hello world".to_string(),
-                },
-                Doc {
-                    id: 2,
-                    title: "c d e".to_string(),
-                    text: "lorem ipsum".to_string(),
-                },
-            ];
+            GhostToken::new(|token| {
+                let mut idx: Index<usize> = create_index(2);
+                let docs = vec![
+                    Doc {
+                        id: 1,
+                        title: "a b c".to_string(),
+                        text: "hello world".to_string(),
+                    },
+                    Doc {
+                        id: 2,
+                        title: "c d e".to_string(),
+                        text: "lorem ipsum".to_string(),
+                    },
+                ];
 
-            for doc in docs {
-                add_document_to_index(
-                    &mut idx,
-                    &[title_extract, text_extract],
-                    tokenizer,
-                    filter,
-                    doc.id,
-                    doc,
-                );
-            }
-
-            fn custom_filter(s: &String) -> String {
-                if s.as_str() == "a" {
-                    return "".to_string();
+                for doc in docs {
+                    add_document_to_index(
+                        &mut idx,
+                        &[title_extract, text_extract],
+                        tokenizer,
+                        filter,
+                        doc.id,
+                        doc,
+                        &mut token,
+                    );
                 }
-                filter(s)
-            }
-            let result = query(
-                &mut idx,
-                &"a".to_string(),
-                &mut crate::query::score::default::bm25::new(),
-                tokenizer,
-                custom_filter,
-                &vec![1., 1.],
-                None,
-            );
-            assert_eq!(result.len(), 0);
+
+                fn custom_filter(s: &String) -> String {
+                    if s.as_str() == "a" {
+                        return "".to_string();
+                    }
+                    filter(s)
+                }
+                let result = query(
+                    &mut idx,
+                    &"a".to_string(),
+                    &mut crate::query::score::default::bm25::new(),
+                    tokenizer,
+                    custom_filter,
+                    &vec![1., 1.],
+                    None,
+                    &mut token,
+                );
+                assert_eq!(result.len(), 0);
+            })
         }
 
         #[test]
         fn it_should_use_token_separator_as_disjunction_operator() {
-            let mut idx: Index<usize> = create_index(2);
-            let docs = vec![
-                Doc {
-                    id: 1,
-                    title: "a b c".to_string(),
-                    text: "hello world".to_string(),
-                },
-                Doc {
-                    id: 2,
-                    title: "c d e".to_string(),
-                    text: "lorem ipsum".to_string(),
-                },
-            ];
+            GhostToken::new(|token| {
+                let mut idx: Index<usize> = create_index(2);
+                let docs = vec![
+                    Doc {
+                        id: 1,
+                        title: "a b c".to_string(),
+                        text: "hello world".to_string(),
+                    },
+                    Doc {
+                        id: 2,
+                        title: "c d e".to_string(),
+                        text: "lorem ipsum".to_string(),
+                    },
+                ];
 
-            for doc in docs {
-                add_document_to_index(
+                for doc in docs {
+                    add_document_to_index(
+                        &mut idx,
+                        &[title_extract, text_extract],
+                        tokenizer,
+                        filter,
+                        doc.id,
+                        doc,
+                        &mut token,
+                    );
+                }
+
+                let result = query(
                     &mut idx,
-                    &[title_extract, text_extract],
+                    &"a d".to_string(),
+                    &mut crate::query::score::default::bm25::new(),
                     tokenizer,
                     filter,
-                    doc.id,
-                    doc,
+                    &vec![1., 1.],
+                    None,
+                    &mut token,
                 );
-            }
-
-            let result = query(
-                &mut idx,
-                &"a d".to_string(),
-                &mut crate::query::score::default::bm25::new(),
-                tokenizer,
-                filter,
-                &vec![1., 1.],
-                None,
-            );
-            assert_eq!(result.len(), 2);
-            assert_eq!(
-                approx_equal(result.get(0).unwrap().score, 0.6931471805599453, 8),
-                true
-            );
-            assert_eq!(
-                result.get(0).unwrap().key == 1 || result.get(0).unwrap().key == 2,
-                true
-            );
-            assert_eq!(
-                approx_equal(result.get(1).unwrap().score, 0.6931471805599453, 8),
-                true
-            );
-            assert_eq!(
-                result.get(1).unwrap().key == 1 || result.get(1).unwrap().key == 2,
-                true
-            );
-            assert_ne!(result.get(0).unwrap().key, result.get(1).unwrap().key);
+                assert_eq!(result.len(), 2);
+                assert_eq!(
+                    approx_equal(result.get(0).unwrap().score, 0.6931471805599453, 8),
+                    true
+                );
+                assert_eq!(
+                    result.get(0).unwrap().key == 1 || result.get(0).unwrap().key == 2,
+                    true
+                );
+                assert_eq!(
+                    approx_equal(result.get(1).unwrap().score, 0.6931471805599453, 8),
+                    true
+                );
+                assert_eq!(
+                    result.get(1).unwrap().key == 1 || result.get(1).unwrap().key == 2,
+                    true
+                );
+                assert_ne!(result.get(0).unwrap().key, result.get(1).unwrap().key);
+            })
         }
     }
     pub mod expand {
@@ -512,62 +538,68 @@ mod tests {
 
         #[test]
         fn it_should_expand_all() {
-            let mut idx: Index<usize> = create_index(1);
-            let docs: Vec<Doc> = vec![
-                Doc {
-                    id: 1,
-                    title: "abc".to_string(),
-                    text: "hello world".to_string(),
-                },
-                Doc {
-                    id: 2,
-                    title: "adef".to_string(),
-                    text: "lorem ipsum".to_string(),
-                },
-            ];
+            GhostToken::new(|token| {
+                let mut idx: Index<usize> = create_index(1);
+                let docs: Vec<Doc> = vec![
+                    Doc {
+                        id: 1,
+                        title: "abc".to_string(),
+                        text: "hello world".to_string(),
+                    },
+                    Doc {
+                        id: 2,
+                        title: "adef".to_string(),
+                        text: "lorem ipsum".to_string(),
+                    },
+                ];
 
-            for doc in docs {
-                add_document_to_index(
-                    &mut idx,
-                    &[title_extract, text_extract],
-                    tokenizer,
-                    filter,
-                    doc.id,
-                    doc,
-                );
-            }
-            let exp = expand_term(&idx, &"a".to_string());
-            assert_eq!(exp, vec!["adef".to_string(), "abc".to_string()]);
+                for doc in docs {
+                    add_document_to_index(
+                        &mut idx,
+                        &[title_extract, text_extract],
+                        tokenizer,
+                        filter,
+                        doc.id,
+                        doc,
+                        &mut token,
+                    );
+                }
+                let exp = expand_term(&idx, &"a".to_string(), &token);
+                assert_eq!(exp, vec!["adef".to_string(), "abc".to_string()]);
+            })
         }
 
         #[test]
         fn it_should_not_expand() {
-            let mut idx: Index<usize> = create_index(2);
-            let docs = vec![
-                Doc {
-                    id: 1,
-                    title: "abc def".to_string(),
-                    text: "hello world".to_string(),
-                },
-                Doc {
-                    id: 2,
-                    title: "adef abc".to_string(),
-                    text: "lorem ipsum".to_string(),
-                },
-            ];
+            GhostToken::new(|token| {
+                let mut idx: Index<usize> = create_index(2);
+                let docs = vec![
+                    Doc {
+                        id: 1,
+                        title: "abc def".to_string(),
+                        text: "hello world".to_string(),
+                    },
+                    Doc {
+                        id: 2,
+                        title: "adef abc".to_string(),
+                        text: "lorem ipsum".to_string(),
+                    },
+                ];
 
-            for doc in docs {
-                add_document_to_index(
-                    &mut idx,
-                    &[title_extract, text_extract],
-                    tokenizer,
-                    filter,
-                    doc.id,
-                    doc,
-                );
-            }
-            let exp = expand_term(&idx, &"x".to_string());
-            assert_eq!(exp, Vec::new() as Vec<String>);
+                for doc in docs {
+                    add_document_to_index(
+                        &mut idx,
+                        &[title_extract, text_extract],
+                        tokenizer,
+                        filter,
+                        doc.id,
+                        doc,
+                        &mut token,
+                    );
+                }
+                let exp = expand_term(&idx, &"x".to_string(), &mut token);
+                assert_eq!(exp, Vec::new() as Vec<String>);
+            })
         }
     }
 }

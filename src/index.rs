@@ -1,9 +1,7 @@
-use core::panic;
 use std::{
-    cell::{Ref, RefMut},
     collections::{HashMap, HashSet},
+    fmt::{Debug, Formatter},
     hash::Hash,
-    rc::Rc,
     usize,
 };
 
@@ -12,11 +10,11 @@ use typed_arena::Arena;
 
 use crate::utils::{FieldAccessor, Filter, Tokenizer};
 
-type InvertedIndexNodeRef<'arena, 'id, T> =
-    &'arena GhostCell<'id, InvertedIndexNode<'arena, 'id, T>>;
+pub type InvertedIndexNodeRef<'arena, 'idx, 'idn, T> =
+    &'arena GhostCell<'idx, InvertedIndexNode<'arena, 'idx, 'idn, T>>;
 
-type DocumentPointerRef<'arena, 'id, T> =
-    &'arena GhostCell<'id, DocumentPointer<'arena, 'id, T>>;
+pub type DocumentPointerRef<'arena, 'idn, T> =
+    &'arena GhostCell<'idn, DocumentPointer<'arena, 'idn, T>>;
 
 /**
 Index data structure.
@@ -25,21 +23,19 @@ This data structure is optimized for memory consumption and performant mutations
 basic information.
  * typeparam `T` Document key.
  */
-pub struct Index<'arena, 'id, T> {
+pub struct Index<'arena, 'idx, 'idn, T> {
     /// Additional information about documents.
     pub docs: HashMap<T, DocumentDetails<T>>,
     /// Inverted index root node.
-    pub root: InvertedIndexNodeRef<'arena,'id,T>,
+    pub root: Option<InvertedIndexNodeRef<'arena, 'idx, 'idn, T>>,
     /// Additional information about indexed fields in all documents.
     pub fields: Vec<FieldDetails>,
 
     // Arena?
-    pub arena_index: Arena<InvertedIndexNode<'arena,'id,T>>,
-    pub arena_doc: Arena<DocumentPointer<'arena,'id,T>>
-
-
+    pub arena_index: Arena<InvertedIndexNode<'arena, 'idx, 'idn, T>>,
+    pub arena_doc: Arena<DocumentPointer<'arena, 'idn, T>>,
 }
-unsafe impl<'arena, 'id, T> Send for Index<'arena, 'id, T> {}
+unsafe impl<'arena, 'idx, 'idn, T> Send for Index<'arena, 'idx, 'idn, T> {}
 
 /**
 Creates an Index.
@@ -47,21 +43,24 @@ Creates an Index.
  * `fieldsNum` Number of fields.
  * returns `Index`
  */
-pub fn create_index<'arena, 'id, T>(
-    fields_num: usize
-) -> Index<'arena, 'id, T> {
+pub fn create_index<'arena, 'idx, 'idn, T>(fields_num: usize) -> Index<'arena, 'idx, 'idn, T> {
     let fields: Vec<FieldDetails> = vec![FieldDetails { sum: 0, avg: 0_f64 }; fields_num];
-    let arena_index = Arena::new();
     Index {
         docs: HashMap::new(),
-        root: GhostCell::from_mut(
-            arena_index.alloc(create_inverted_index_node(&char::from_u32(0).unwrap())),
-        ),
+        root: None,
         fields,
-        arena_index,
-        arena_doc:  Arena::new()
+        arena_index: Arena::new(),
+        arena_doc: Arena::new(),
     }
 }
+
+pub fn initialize<'arena, 'idx, 'idn, T>(index: &'arena mut Index<'arena, 'idx, 'idn, T>) {
+    index.root =
+        Some(GhostCell::from_mut(index.arena_index.alloc(
+            create_inverted_index_node(&char::from_u32(0).unwrap()),
+        )));
+}
+
 /**
 Document Details object stores additional information about documents.
  * typeparam `T` Document key.
@@ -82,11 +81,11 @@ pub struct DocumentDetails<T> {
 Document pointer contains information about term frequency for a document.
 * typeparam `T` Document key.
 */
-pub struct DocumentPointer<'arena, 'id, T> {
+pub struct DocumentPointer<'arena, 'idn, T> {
     /**
     Next DocumentPointer in the intrusive linked list.
      */
-    pub next: Option<DocumentPointerRef<'arena, 'id, T>>,
+    pub next: Option<DocumentPointerRef<'arena, 'idn, T>>,
     /**
     Reference to a DocumentDetailsobject that is used for this document.
      */
@@ -102,7 +101,7 @@ Inverted Index Node.
 Inverted index is implemented with a [trie](https://en.wikipedia.org/wiki/Trie) data structure.
  * typeparam `T` Document key.
 */
-pub struct InvertedIndexNode<'arena, 'id, T> {
+pub struct InvertedIndexNode<'arena, 'idx, 'idn, T> {
     /**
     Char code is used to store keys in the trie data structure.
      */
@@ -110,20 +109,28 @@ pub struct InvertedIndexNode<'arena, 'id, T> {
     /**
     Next InvertedIndexNode in the intrusive linked list.
      */
-    pub next: Option<InvertedIndexNodeRef<'arena, 'id, T>>,
+    pub next: Option<InvertedIndexNodeRef<'arena, 'idx, 'idn, T>>,
     /**
     Linked list of children {@link InvertedIndexNode}.
      */
-    pub first_child: Option<InvertedIndexNodeRef<'arena, 'id, T>>,
+    pub first_child: Option<InvertedIndexNodeRef<'arena, 'idx, 'idn, T>>,
     /**
     Linked list of documents associated with this node.
      */
-    pub first_doc: Option<DocumentPointerRef<'arena, 'id, T>>,
+    pub first_doc: Option<DocumentPointerRef<'arena, 'idn, T>>,
 }
 
-impl<'arena, 'id, T> PartialEq for InvertedIndexNode<'arena, 'id, T> {
+impl<'arena, 'idx, 'idn, T> PartialEq for InvertedIndexNode<'arena, 'idx, 'idn, T> {
     fn eq(&self, other: &InvertedIndexNode<T>) -> bool {
         other.char == self.char
+    }
+}
+
+impl<'arena, 'idx, 'idn, T> Debug for InvertedIndexNode<'arena, 'idx, 'idn, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        f.debug_struct("InvertedIndexNode")
+            .field("char", &self.char)
+            .finish()
     }
 }
 
@@ -148,7 +155,9 @@ Creates inverted index node.
  * `charCode` Char code.
  returns InvertedIndexNode instance.
  */
-fn create_inverted_index_node<'arena, 'id, T>(char: &char) -> InvertedIndexNode<'arena, 'id, T> {
+fn create_inverted_index_node<'arena, 'idx, 'idn, T>(
+    char: &char,
+) -> InvertedIndexNode<'arena, 'idx, 'idn, T> {
     InvertedIndexNode {
         char: char.to_owned(),
         next: None,
@@ -164,11 +173,11 @@ Finds inverted index node that matches the `term`.
  * `term` Term.
 returns Inverted index node that contains `term` or an `undefined` value.
  */
-pub fn find_inverted_index_node<'arena, 'id, T>(
-    node: InvertedIndexNodeRef<'arena, 'id, T>,
+pub fn find_inverted_index_node<'arena, 'idx, 'idn, T>(
+    node: InvertedIndexNodeRef<'arena, 'idx, 'idn, T>,
     term: &str,
-    token: &GhostToken<'id>,
-) -> Option<InvertedIndexNodeRef<'arena, 'id, T>> {
+    token: &GhostToken<'idx>,
+) -> Option<InvertedIndexNodeRef<'arena, 'idx, 'idn, T>> {
     let mut node_iteration = Some(node);
     for char in term.chars() {
         if node_iteration.is_none() {
@@ -187,11 +196,11 @@ Finds inverted index child node with matching `char`.
  * `charCode` Char code.
 returns Matching InvertedIndexNode or `undefined`.
  */
-fn find_inverted_index_node_child_nodes_by_char<'arena, 'id, T>(
-    from_node: InvertedIndexNodeRef<'arena, 'id, T>,
+fn find_inverted_index_node_child_nodes_by_char<'arena, 'idx, 'idn, T>(
+    from_node: InvertedIndexNodeRef<'arena, 'idx, 'idn, T>,
     char: &char,
-    token: &GhostToken<'id>,
-) -> Option<InvertedIndexNodeRef<'arena, 'id, T>> {
+    token: &GhostToken<'idx>,
+) -> Option<InvertedIndexNodeRef<'arena, 'idx, 'idn, T>> {
     let child = from_node.borrow(token).first_child;
     if child.is_none() {
         return None;
@@ -213,12 +222,12 @@ Adds inverted index child node.
  * `parent` Parent node.
  * `child` Child node to add.
  */
-fn add_inverted_index_child_node<'arena, 'id, T: Clone>(
-    parent: &mut InvertedIndexNode<'arena,'id,T>,
-    child: InvertedIndexNodeRef<'arena, 'id, T>,
-    token: &mut GhostToken<'id>,
+fn add_inverted_index_child_node<'arena, 'idx, 'idn, T: Clone>(
+    parent: &mut InvertedIndexNode<'arena, 'idx, 'idn, T>,
+    child: InvertedIndexNodeRef<'arena, 'idx, 'idn, T>,
+    token: &mut GhostToken<'idx>,
 ) {
-    //-> Rc<GhostCell<'id,InvertedIndexNode<T>>>
+    //-> Rc<GhostCell<'idx,InvertedIndexNode<T>>>
     if let Some(first) = parent.first_child {
         child.borrow_mut(token).next = Some(first);
     }
@@ -239,14 +248,15 @@ typeparam `D` Document type.
  * `key` Document key.
  * `doc` Document.
  */
-fn add_inverted_index_doc<'arena, 'id, T: Clone>(
-    node: InvertedIndexNodeRef<'arena, 'id, T>,
-    doc: DocumentPointerRef<'arena, 'id, T>,
-    token: &mut GhostToken<'id>,
+fn add_inverted_index_doc<'arena, 'idx, 'idn, T: Clone>(
+    node: InvertedIndexNodeRef<'arena, 'idx, 'idn, T>,
+    doc: DocumentPointerRef<'arena, 'idn, T>,
+    mut token_x: &mut GhostToken<'idx>,
+    mut token_n: &mut GhostToken<'idn>,
 ) {
-    let mut node_locked = node.get_mut();
+    let mut node_locked = node.borrow_mut(&mut token_x);
     if let Some(first) = &node_locked.first_doc {
-        doc.borrow_mut(token).next = Some(first);
+        doc.borrow_mut(&mut token_n).next = Some(first);
     }
     node_locked.first_doc = Some(doc);
 }
@@ -258,15 +268,15 @@ Adds a document to the index.
  * `doc` Posting.
 */
 
-pub fn add_document_to_index<'arena, 'id, T: Eq + Hash + Copy, D>(
-    index: &'arena mut Index<'arena, 'id, T>,
+pub fn add_document_to_index<'arena, 'idx, 'idn, T: Eq + Hash + Copy, D>(
+    index: &'arena mut Index<'arena, 'idx, 'idn, T>,
     field_accessors: &[FieldAccessor<D>],
     tokenizer: Tokenizer,
     filter: Filter,
     key: T,
     doc: D,
-    token: &mut GhostToken<'id>,
-    
+    token_x: &mut GhostToken<'idx>,
+    token_n: &mut GhostToken<'idn>,
 ) {
     let docs = &mut index.docs;
     let fields = &mut index.fields;
@@ -313,22 +323,19 @@ pub fn add_document_to_index<'arena, 'id, T: Eq + Hash + Copy, D>(
         }
     }
 
-    docs.insert(
-        key,
-        DocumentDetails { key, field_length },
-    );
+    docs.insert(key, DocumentDetails { key, field_length });
     for term in all_terms {
-        let mut node = index.root;
+        let mut node = index.root.unwrap();
 
         for (i, char) in term.chars().enumerate() {
-            if node.borrow(token).first_child.is_none() {
-                node = create_inverted_index_nodes(index, node, &term, &i, token);
+            if node.borrow(token_x).first_child.is_none() {
+                node = create_inverted_index_nodes(index, node, &term, &i, token_x);
                 break;
             }
-            let next_node = find_inverted_index_node_child_nodes_by_char(&node, &char, token);
+            let next_node = find_inverted_index_node_child_nodes_by_char(&node, &char, token_x);
             match next_node {
                 None => {
-                    node = create_inverted_index_nodes(index, node, &term, &i, token);
+                    node = create_inverted_index_nodes(index, node, &term, &i, token_x);
                     break;
                 }
                 Some(n) => {
@@ -342,11 +349,7 @@ pub fn add_document_to_index<'arena, 'id, T: Eq + Hash + Copy, D>(
             term_frequency: term_counts[&term].to_owned(),
         });
         let z = GhostCell::from_mut(y);
-        add_inverted_index_doc(
-            node,
-            &*z,
-            token,
-        )
+        add_inverted_index_doc(node, &*z, token_x, token_n)
     }
 }
 
@@ -359,21 +362,22 @@ Creates inverted index nodes for the `term` starting from the `start` character.
  * returns leaf InvertedIndexNode.
 
  */
-fn create_inverted_index_nodes<'arena, 'id, T: Clone>(
-    index:&'arena mut Index<'arena, 'id,T>,
-    parent: InvertedIndexNodeRef<'arena, 'id, T>,
+fn create_inverted_index_nodes<'arena, 'idx, 'idn, T: Clone>(
+    index: &'arena mut Index<'arena, 'idx, 'idn, T>,
+    parent: InvertedIndexNodeRef<'arena, 'idx, 'idn, T>,
     term: &str,
     start: &usize,
-    token: &mut GhostToken<'id>,
-) -> InvertedIndexNodeRef<'arena, 'id, T> {
+    token: &mut GhostToken<'idx>,
+) -> InvertedIndexNodeRef<'arena, 'idx, 'idn, T> {
     for (i, char) in term.chars().enumerate() {
         if &i < start {
             continue;
         }
-        let new_node  = GhostCell::from_mut(index.arena_index.alloc(create_inverted_index_node(&char)));
+        let new_node =
+            GhostCell::from_mut(index.arena_index.alloc(create_inverted_index_node(&char)));
         let new_parent = {
             let mut parent_ref = parent.borrow_mut(token);
-            add_inverted_index_child_node( parent_ref, new_node, token);
+            add_inverted_index_child_node(parent_ref, new_node, token);
             parent_ref.first_child.unwrap()
         };
         parent = new_parent;
@@ -389,11 +393,11 @@ fn create_inverted_index_nodes<'arena, 'id, T: Clone>(
  * `removed` Set of removed document ids.
  * `key` Document key.
 */
-pub fn remove_document_from_index<'id, T: Hash + Eq + Copy>(
+pub fn remove_document_from_index<'idx, T: Hash + Eq + Copy>(
     index: &mut Index<T>,
     removed: &mut HashSet<T>,
     key: T,
-    token:&GhostToken<'id>
+    token: &GhostToken<'idx>,
 ) {
     //
     let fields = &mut index.fields;
@@ -424,8 +428,13 @@ pub fn remove_document_from_index<'id, T: Hash + Eq + Copy>(
 /**
 Cleans up removed documents from the {@link Index}.
 */
-pub fn vacuum_index<T: Hash + Eq>(index: &Index<T>, removed: &mut HashSet<T>) {
-    vacuum_node(index.root, removed);
+pub fn vacuum_index<'arena, 'idx, 'idn, T: Hash + Eq>(
+    index: &Index<'arena, 'idx, 'idn, T>,
+    removed: &mut HashSet<T>,
+    token_x: &mut GhostToken<'idx>,
+    token_n: &mut GhostToken<'idn>,
+) {
+    vacuum_node(index, index.root.unwrap(), removed, token_x, token_n);
     removed.clear();
 }
 
@@ -435,22 +444,24 @@ Recursively cleans up removed documents from the index.
  * `index` Index.
  * `removed` Set of removed document ids.
 */
-fn vacuum_node<'arena,'id, T: Hash + Eq>(
-    node: InvertedIndexNodeRef<'arena,'id,T>,
+fn vacuum_node<'arena, 'idx, 'idn, T: Hash + Eq>(
+    index: &Index<'arena, 'idx, 'idn, T>,
+    node: InvertedIndexNodeRef<'arena, 'idx, 'idn, T>,
     removed: &mut HashSet<T>,
-    token:&mut GhostToken<'id>
+    token_x: &mut GhostToken<'idx>,
+    token_n: &mut GhostToken<'idn>,
 ) -> usize {
-    let mut prev_pointer: Option<DocumentPointerRef<'arena,'id,T>> = None;
-    let mut pointer_option = (&node.borrow(token).first_doc).clone();
+    let mut prev_pointer: Option<DocumentPointerRef<'arena, 'idn, T>> = None;
+    let mut pointer_option = (&node.borrow(token_x).first_doc).clone();
     while let Some(pointer) = pointer_option {
-        let pb = &pointer.borrow(token);
-        if removed.contains(&pb.details.borrow().key) {
+        let pb = &pointer.borrow(token_n);
+        if removed.contains(&pb.details_key) {
             match &prev_pointer {
                 None => {
-                    node.borrow_mut(token).first_doc = pb.next.clone();
+                    node.borrow_mut(token_x).first_doc = pb.next.clone();
                 }
                 Some(prev) => {
-                    prev.borrow_mut(token).next = pb.next.clone();
+                    prev.borrow_mut(token_n).next = pb.next.clone();
                 }
             }
         } else {
@@ -459,29 +470,29 @@ fn vacuum_node<'arena,'id, T: Hash + Eq>(
         pointer_option = (&pb.next).clone();
     }
 
-    let mut prev_child: Option<Rc<GhostCell<'id, InvertedIndexNode<T>>>> = None;
+    let mut prev_child: Option<InvertedIndexNodeRef<'arena, 'idx, 'idn, T>> = None;
     let mut ret = 0;
-    if node.borrow(token).first_doc.is_some() {
+    if node.borrow(token_x).first_doc.is_some() {
         ret = 1;
     }
 
-    let mut child_option = (&node.borrow().first_child).clone();
+    let mut child_option = (&node.borrow(token_x).first_child).clone();
     while let Some(child) = child_option {
-        let r = vacuum_node(Rc::clone(&child), removed);
+        let r = vacuum_node(index, child, removed, token_x, token_n);
         ret |= r;
-        let child_unwrapped = child.borrow();
+        let child_unwrapped = child.borrow(token_x);
         if r == 0 {
             // subtree doesn't have any documents, remove this node
             match &prev_child {
                 Some(prev) => {
-                    prev.borrow_mut(token).next = child_unwrapped.next.clone();
+                    prev.borrow_mut(token_x).next = child_unwrapped.next.clone();
                 }
                 None => {
-                    node.borrow_mut(token).first_child = child_unwrapped.next.clone();
+                    node.borrow_mut(token_x).first_child = child_unwrapped.next.clone();
                 }
             }
         } else {
-            prev_child = Some(Rc::clone(&child));
+            prev_child = Some(&child);
         }
         child_option = (&child_unwrapped.next).clone();
     }
@@ -492,19 +503,25 @@ fn vacuum_node<'arena,'id, T: Hash + Eq>(
     Count the amount of nodes of the index.
     returns the amount, including root node. Which means count will alway be greater than 0
 */
-pub fn count_nodes<'id, T>(idx: &Index<T>) -> i32 {
-    fn count_nodes_recursively<'id, T>(node: &Rc<GhostCell<'id, InvertedIndexNode<T>>>) -> i32 {
+pub fn count_nodes<'arena, 'idx, 'idn, T>(
+    idx: &Index<'arena, 'idx, 'idn, T>,
+    token: &GhostToken<'idx>,
+) -> i32 {
+    fn count_nodes_recursively<'arena, 'idx, 'idn, T>(
+        node: InvertedIndexNodeRef<'arena, 'idx, 'idn, T>,
+        token: &GhostToken<'idx>,
+    ) -> i32 {
         let mut count = 1;
-        let n = node.borrow();
+        let n = node.borrow(token);
         if let Some(first) = &n.first_child {
-            count += count_nodes_recursively(first);
+            count += count_nodes_recursively(first, token);
         }
         if let Some(next) = &n.next {
-            count += count_nodes_recursively(next);
+            count += count_nodes_recursively(next, token);
         }
         count
     }
-    count_nodes_recursively(&idx.root)
+    count_nodes_recursively(&idx.root.unwrap(), token)
 }
 
 #[cfg(test)]
@@ -536,47 +553,60 @@ mod tests {
         use super::*;
 
         #[test]
-        fn it_should_add_one_document_with_three_terms() {
-            let field_accessors: Vec<FieldAccessor<Doc>> =
-                vec![field_accessor as fn(doc: &Doc) -> Option<&str>];
+        fn it_should_add_one_document_with_three_terms<'idx,'idn>() {
+            GhostToken::new(|token_x| {
+                GhostToken::new(|token_n| {
+                    let field_accessors: Vec<FieldAccessor<Doc>> =
+                        vec![field_accessor as fn(doc: &Doc) -> Option<&str>];
 
-            let mut index = create_index::<usize>(1);
-            let doc = Doc {
-                id: 1,
-                text: "a b c".to_string(),
-            };
-            add_document_to_index(&mut index, &field_accessors, tokenizer, filter, doc.id, doc);
-            assert_eq!(index.docs.len(), 1);
-            let (_, added_doc) = index.docs.iter().next().unwrap();
-            let e = DocumentDetails {
-                field_length: vec![3],
-                key: 1 as usize,
-            };
-            assert_eq!(&*added_doc.borrow(), &e);
-            assert_eq!(index.fields[0], FieldDetails { avg: 3_f64, sum: 3 });
-            let root = &index.root.borrow();
-            assert_eq!(&root.char, &char::from_u32(0).unwrap());
-            assert_eq!(&root.next.is_none(), &true);
-            assert_eq!(&root.first_doc.is_none(), &true);
+                    let mut index = create_index::<usize>(1);
+                    let doc = Doc {
+                        id: 1,
+                        text: "a b c".to_string(),
+                    };
+                    add_document_to_index(
+                        &mut index,
+                        &field_accessors,
+                        tokenizer,
+                        filter,
+                        doc.id,
+                        doc,
+                        &mut token_x,
+                        &mut token_n,
+                    );
+                    assert_eq!(index.docs.len(), 1);
+                    let (_, added_doc) = index.docs.iter().next().unwrap();
+                    let e = DocumentDetails {
+                        field_length: vec![3],
+                        key: 1 as usize,
+                    };
+                    assert_eq!(&*added_doc, &e);
+                    assert_eq!(index.fields[0], FieldDetails { avg: 3_f64, sum: 3 });
+                    let root = &index.root.unwrap().borrow(&token_x);
+                    assert_eq!(&root.char, &char::from_u32(0).unwrap());
+                    assert_eq!(&root.next.is_none(), &true);
+                    assert_eq!(&root.first_doc.is_none(), &true);
 
-            let first_child = &root.first_child.as_ref().unwrap().borrow();
-            assert_eq!(&first_child.char, &(char::from_u32(99).unwrap()));
-            assert_eq!(&first_child.first_child.is_none(), &true);
+                    let first_child = &root.first_child.as_ref().unwrap().borrow(&token_x);
+                    assert_eq!(&first_child.char, &(char::from_u32(99).unwrap()));
+                    assert_eq!(&first_child.first_child.is_none(), &true);
 
-            let first_child_next = &first_child.next.as_ref().unwrap().borrow();
-            assert_eq!(&first_child_next.char, &(char::from_u32(98).unwrap()));
-            assert_eq!(&first_child.first_child.is_none(), &true);
-            let first_child_first_doc = &first_child.first_doc.as_ref().unwrap().borrow();
-            assert_eq!(&first_child_first_doc.term_frequency, &vec![1 as usize]);
-            assert_eq!(&*first_child_first_doc.details.borrow(), &e);
-            assert_eq!(&first_child_first_doc.next.is_none(), &true);
-            assert_eq!(&first_child_first_doc.next.is_none(), &true);
+                    let first_child_next = &first_child.next.as_ref().unwrap().borrow(&token_x);
+                    assert_eq!(&first_child_next.char, &(char::from_u32(98).unwrap()));
+                    assert_eq!(&first_child.first_child.is_none(), &true);
+                    let first_child_first_doc =
+                        &first_child.first_doc.as_ref().unwrap().borrow(&token_x);
+                    assert_eq!(&first_child_first_doc.term_frequency, &vec![1 as usize]);
+                    assert_eq!(&first_child_first_doc.details_key, &e.key);
+                    assert_eq!(&first_child_first_doc.next.is_none(), &true);
+                    assert_eq!(&first_child_first_doc.next.is_none(), &true);
 
-            assert_eq!(
-                &first_child_next.next.as_ref().unwrap().borrow().char,
-                &(char::from_u32(97).unwrap())
-            );
-
+                    assert_eq!(
+                        &first_child_next.next.as_ref().unwrap().borrow(&token_x).char,
+                        &(char::from_u32(97).unwrap())
+                    );
+                })
+            })
             // TODO test more properties
         }
 
@@ -590,60 +620,68 @@ mod tests {
                 id: 1,
                 text: "a b c".to_string(),
             };
-            add_document_to_index(
-                &mut index,
-                &field_accessors,
-                tokenizer,
-                filter,
-                doc_1.id,
-                doc_1.clone(),
-            );
-
             let doc_2 = Doc {
                 id: 2,
                 text: "b c d".to_string(),
             };
-            add_document_to_index(
-                &mut index,
-                &field_accessors,
-                tokenizer,
-                filter,
-                doc_2.id,
-                doc_2.clone(),
-            );
-            assert_eq!(index.docs.len(), 2);
-            assert_eq!(
-                &*index.docs.get(&doc_1.id).as_ref().unwrap().borrow(),
-                &DocumentDetails {
-                    field_length: vec![3],
-                    key: 1 as usize
-                }
-            );
-            assert_eq!(
-                &*index.docs.get(&doc_2.id).as_ref().unwrap().borrow(),
-                &DocumentDetails {
-                    field_length: vec![3],
-                    key: 2 as usize
-                }
-            );
-            assert_eq!(index.fields[0], FieldDetails { avg: 3_f64, sum: 6 });
-            let root = &index.root.borrow();
-            assert_eq!(&root.char, &char::from_u32(0).unwrap());
-            assert_eq!(&root.next.is_none(), &true);
-            assert_eq!(&root.first_doc.is_none(), &true);
+            GhostToken::new(|token_x| {
+                GhostToken::new(|token_n| {
+                add_document_to_index(
+                    &mut index,
+                    &field_accessors,
+                    tokenizer,
+                    filter,
+                    doc_1.id,
+                    doc_1.clone(),
+                    &mut token_x,
+                    &mut token_n
+                );
 
-            let first_child = &root.first_child.as_ref().unwrap().borrow();
-            assert_eq!(&first_child.char, &char::from_u32(100).unwrap());
-            assert_eq!(&first_child.first_child.is_none(), &true);
+                add_document_to_index(
+                    &mut index,
+                    &field_accessors,
+                    tokenizer,
+                    filter,
+                    doc_2.id,
+                    doc_2.clone(),
+                    &mut token_x,
+                    &mut token_n
+                );
 
-            let first_child_next = &first_child.next.as_ref().unwrap().borrow();
-            assert_eq!(&first_child_next.char, &char::from_u32(99).unwrap());
-            assert_eq!(&first_child.first_child.is_none(), &true);
-            let nested_next = first_child_next.next.as_ref().unwrap().borrow();
-            assert_eq!(&nested_next.char, &char::from_u32(98).unwrap());
-            let nested_nested_next = &nested_next.next.as_ref().unwrap().borrow();
-            assert_eq!(&nested_nested_next.char, &char::from_u32(97).unwrap());
+                assert_eq!(index.docs.len(), 2);
+                assert_eq!(
+                    index.docs.get(&doc_1.id).unwrap(),
+                    &DocumentDetails {
+                        field_length: vec![3],
+                        key: 1 as usize,
+                    }
+                );
+                assert_eq!(
+                    index.docs.get(&doc_2.id).unwrap(),
+                    &DocumentDetails {
+                        field_length: vec![3],
+                        key: 2 as usize
+                    }
+                );
+                assert_eq!(index.fields[0], FieldDetails { avg: 3_f64, sum: 6 });
+                let root = &index.root.unwrap().borrow(&token_x);
+                assert_eq!(&root.char, &char::from_u32(0).unwrap());
+                assert_eq!(&root.next.is_none(), &true);
+                assert_eq!(&root.first_doc.is_none(), &true);
 
+                let first_child = &root.first_child.as_ref().unwrap().borrow(&token_x);
+                assert_eq!(&first_child.char, &char::from_u32(100).unwrap());
+                assert_eq!(&first_child.first_child.is_none(), &true);
+
+                let first_child_next = &first_child.next.as_ref().unwrap().borrow(&token_x);
+                assert_eq!(&first_child_next.char, &char::from_u32(99).unwrap());
+                assert_eq!(&first_child.first_child.is_none(), &true);
+                let nested_next = first_child_next.next.as_ref().unwrap().borrow(&token_x);
+                assert_eq!(&nested_next.char, &char::from_u32(98).unwrap());
+                let nested_nested_next = &nested_next.next.as_ref().unwrap().borrow(&token_x);
+                assert_eq!(&nested_nested_next.char, &char::from_u32(97).unwrap());
+            });
+        });
             // dont test all the properties
         }
 
@@ -657,14 +695,20 @@ mod tests {
                 id: 1,
                 text: "a  b".to_string(), // double space could introduce empty tokens
             };
-            add_document_to_index(
-                &mut index,
-                &field_accessors,
-                tokenizer,
-                filter,
-                doc_1.id,
-                doc_1.clone(),
-            );
+            GhostToken::new(|token_x| {
+                GhostToken::new(|token_n| {
+                    add_document_to_index(
+                        &mut index,
+                        &field_accessors,
+                        tokenizer,
+                        filter,
+                        doc_1.id,
+                        doc_1.clone(),
+                        &mut token_x,
+                        &mut token_n
+                    );
+                });
+            });
         }
     }
 
@@ -679,26 +723,38 @@ mod tests {
                 id: 1,
                 text: "a".to_string(),
             }];
-            for doc in docs {
-                add_document_to_index(&mut idx, &[field_accessor], tokenizer, filter, doc.id, doc)
-            }
-            remove_document_from_index(&mut idx, &mut removed, 1);
-            vacuum_index(&mut idx, &mut removed);
+            GhostToken::new(|token_x| {
+                GhostToken::new(|token_n| {
+                for doc in docs {
+                    add_document_to_index(
+                        &mut idx,
+                        &[field_accessor],
+                        tokenizer,
+                        filter,
+                        doc.id,
+                        doc,
+                        &mut token_x,
+                        &mut token_n
+                    )
+                }
+                remove_document_from_index(&mut idx, &mut removed, 1, &token_x);
+                vacuum_index(&mut idx, &mut removed, &mut token_x, &mut token_n);
 
-            assert_eq!(idx.docs.len(), 0);
-            assert_eq!(idx.fields.len(), 1);
-            assert_eq!(idx.fields.get(0).unwrap().sum, 0);
-            assert_eq!(idx.fields.get(0).unwrap().avg.is_nan(), true);
+                assert_eq!(idx.docs.len(), 0);
+                assert_eq!(idx.fields.len(), 1);
+                assert_eq!(idx.fields.get(0).unwrap().sum, 0);
+                assert_eq!(idx.fields.get(0).unwrap().avg.is_nan(), true);
 
-            assert_eq!(
-                *idx.root.borrow(),
-                InvertedIndexNode {
+                let x = idx.root.unwrap().borrow(&token_x);
+                let y: &InvertedIndexNode<usize> = &InvertedIndexNode {
                     char: char::from_u32(0).unwrap(),
                     first_child: None,
                     first_doc: None,
-                    next: None
-                }
-            );
+                    next: None,
+                };
+                assert_eq!(x, y);
+            });
+        });
         }
     }
     mod find {
@@ -707,13 +763,14 @@ mod tests {
 
         use super::*;
 
-        fn create<'arena,'id,T> (
-            index: &mut Index<T>,
+        fn create<'arena, 'idx, 'idn>(
+            index: &'arena mut Index<'arena, 'idx, 'idn, usize>,
             char: char,
-            token: &GhostToken<'id>,
-        ) -> InvertedIndexNodeRef<'arena,'id,T> {
-            let node: InvertedIndexNode<String> = create_inverted_index_node(&char);
-            GhostCell::from_mut(index.arena.alloc(node))
+            token: &GhostToken<'idx>,
+        ) -> InvertedIndexNodeRef<'arena, 'idx, 'idn, usize> {
+            let node: InvertedIndexNode<'arena, 'idx, 'idn, usize> =
+                create_inverted_index_node(&char);
+            GhostCell::from_mut(index.arena_index.alloc(node))
         }
 
         mod char_code {
@@ -721,36 +778,40 @@ mod tests {
 
             #[test]
             fn it_should_find_undefined_children_if_none() {
-                let node = create('x');
-                let c = find_inverted_index_node_child_nodes_by_char(&node.borrow(), &'x');
-                assert_eq!(c.is_none(), true);
+                GhostToken::new(|token_x| {
+                GhostToken::new(|token_n| {
+                    let mut index = create_index::<usize>(1);
+                    let node = create(&mut index, 'x', &token);
+                    let c = find_inverted_index_node_child_nodes_by_char(&node, &'x', &token);
+                    assert_eq!(c.is_none(), true);
+                });
             }
 
             #[test]
             fn it_should_find_existing() {
-                let p = create('x');
-                let c1 = create('y');
-                let c2 = create('z');
-                add_inverted_index_child_node(&mut p.borrow_mut(), Rc::clone(&c1));
-                add_inverted_index_child_node(&mut p.borrow_mut(), Rc::clone(&c2));
-                assert_eq!(
-                    std::ptr::eq(
-                        find_inverted_index_node_child_nodes_by_char(&p.borrow(), &'y')
-                            .unwrap()
-                            .as_ref(),
-                        c1.as_ref()
-                    ),
-                    true
-                );
-                assert_eq!(
-                    std::ptr::eq(
-                        find_inverted_index_node_child_nodes_by_char(&p.borrow(), &'z')
-                            .unwrap()
-                            .as_ref(),
-                        c2.as_ref()
-                    ),
-                    true
-                );
+                GhostToken::new(|token_x| {
+                GhostToken::new(|token_n| {
+                    let mut index = create_index::<usize>(1);
+                    let p = create(&mut index, 'x', &token);
+                    let c1 = create(&mut index, 'y', &token);
+                    let c2 = create(&mut index, 'z', &token);
+                    add_inverted_index_child_node(&mut p.borrow_mut(&mut token), &c1, &mut token);
+                    add_inverted_index_child_node(&mut p.borrow_mut(&mut token), &c2, &mut token);
+                    assert_eq!(
+                        std::ptr::eq(
+                            find_inverted_index_node_child_nodes_by_char(&p, &'y', &token).unwrap(),
+                            c1
+                        ),
+                        true
+                    );
+                    assert_eq!(
+                        std::ptr::eq(
+                            find_inverted_index_node_child_nodes_by_char(&p, &'z', &token).unwrap(),
+                            c2
+                        ),
+                        true
+                    );
+                });
             }
         }
 
@@ -758,20 +819,21 @@ mod tests {
             use super::*;
             #[test]
             fn it_should_find() {
-                let p = create('x');
-                let a = create('a');
-                let b = create('b');
-                let c = create('c');
-                add_inverted_index_child_node(&mut p.borrow_mut(), Rc::clone(&a));
-                add_inverted_index_child_node(&mut a.borrow_mut(), Rc::clone(&b));
-                add_inverted_index_child_node(&mut b.borrow_mut(), Rc::clone(&c));
-                assert_eq!(
-                    std::ptr::eq(
-                        find_inverted_index_node(p, &"abc").unwrap().as_ref(),
-                        c.as_ref()
-                    ),
-                    true
-                );
+                GhostToken::new(|token_x| {
+                GhostToken::new(|token_n| {
+                    let mut index = create_index::<usize>(1);
+                    let p = create(&mut index, 'x', &token);
+                    let a = create(&mut index, 'a', &token);
+                    let b = create(&mut index, 'b', &token);
+                    let c = create(&mut index, 'c', &token);
+                    add_inverted_index_child_node(&mut p.borrow_mut(&mut token), &a, &mut token);
+                    add_inverted_index_child_node(&mut a.borrow_mut(&mut token), &b, &mut token);
+                    add_inverted_index_child_node(&mut b.borrow_mut(&mut token), &c, &mut token);
+                    assert_eq!(
+                        std::ptr::eq(find_inverted_index_node(p, &"abc", &token).unwrap(), c),
+                        true
+                    );
+                });
             }
         }
 
@@ -792,17 +854,28 @@ mod tests {
                     id: 1,
                     text: "abe".to_string(),
                 };
-                add_document_to_index(&mut index, &field_accessors, tokenizer, filter, doc.id, doc);
-                add_document_to_index(
-                    &mut index,
-                    &field_accessors,
-                    tokenizer,
-                    filter,
-                    doc_2.id,
-                    doc_2,
-                );
-
-                assert_eq!(count_nodes(&index), 5); //
+                GhostToken::new(|token_x| {
+                GhostToken::new(|token_n| {
+                    add_document_to_index(
+                        &mut index,
+                        &field_accessors,
+                        tokenizer,
+                        filter,
+                        doc.id,
+                        doc,
+                        &mut token,
+                    );
+                    add_document_to_index(
+                        &mut index,
+                        &field_accessors,
+                        tokenizer,
+                        filter,
+                        doc_2.id,
+                        doc_2,
+                        &mut token,
+                    );
+                    assert_eq!(count_nodes(&index, &token), 5); //
+                });
             }
 
             #[test]
@@ -819,23 +892,37 @@ mod tests {
                     id: 1,
                     text: "ab ef".to_string(),
                 };
-                add_document_to_index(&mut index, &field_accessors, tokenizer, filter, doc.id, doc);
-                add_document_to_index(
-                    &mut index,
-                    &field_accessors,
-                    tokenizer,
-                    filter,
-                    doc_2.id,
-                    doc_2,
-                );
-
-                assert_eq!(count_nodes(&index), 7); //
+                GhostToken::new(|token_x| {
+                GhostToken::new(|token_n| {
+                    add_document_to_index(
+                        &mut index,
+                        &field_accessors,
+                        tokenizer,
+                        filter,
+                        doc.id,
+                        doc,
+                        &mut token,
+                    );
+                    add_document_to_index(
+                        &mut index,
+                        &field_accessors,
+                        tokenizer,
+                        filter,
+                        doc_2.id,
+                        doc_2,
+                        &mut token,
+                    );
+                    assert_eq!(count_nodes(&index, &token), 7); //
+                });
             }
 
             #[test]
             fn it_should_count_nodes_empty() {
                 let index = create_index::<usize>(1);
-                assert_eq!(count_nodes(&index), 1); // 1 for root
+                GhostToken::new(|token_x| {
+                GhostToken::new(|token_n| {
+                    assert_eq!(count_nodes(&index, &token), 1); // 1 for root
+                });
             }
         }
     }

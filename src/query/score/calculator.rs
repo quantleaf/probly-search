@@ -1,5 +1,5 @@
 use crate::{
-    index::{DocumentDetails, DocumentPointer, FieldDetails},
+    index::{DocumentDetails, DocumentPointer, DocumentPointerRef, FieldDetails},
     query::QueryResult,
 };
 use std::{
@@ -47,7 +47,7 @@ pub trait ScoreCalculator<T: Debug, M> {
         &mut self,
         term_expansion: &TermData,
         document_frequency: usize,
-        documents: &HashMap<T, Rc<RefCell<DocumentDetails<T>>>>,
+        documents: &HashMap<T, DocumentDetails<T>>,
     ) -> Option<M> {
         None
     }
@@ -61,8 +61,8 @@ pub trait ScoreCalculator<T: Debug, M> {
     fn score(
         &mut self,
         before_output: Option<&M>,
-        document_pointer: &Ref<DocumentPointer<T>>,
-        document_details: &Ref<DocumentDetails<T>>,
+        document_pointer: &DocumentPointer<T>,
+        document_details: &DocumentDetails<T>,
         field_data: &FieldData,
         term_expansion: &TermData,
     ) -> Option<f64>;

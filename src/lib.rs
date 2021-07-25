@@ -38,11 +38,12 @@ pub mod test_util {
         s.to_owned()
     }
 
-    pub fn test_score<M, S: ScoreCalculator<usize, M>>(
-        mut idx: &mut Index<usize>,
+    pub fn test_score<'arena, 'idx, 'idn, M, S: ScoreCalculator<usize, M>>(
+        mut idx: &mut Index<'arena, 'idx, 'idn, usize>,
         score_calculator: &mut S,
         q: &str,
         expected: Vec<QueryResult<usize>>,
+        token: &GhostToken<'idx>,
     ) {
         let mut results = query(
             &mut idx,
@@ -52,6 +53,7 @@ pub mod test_util {
             filter,
             &vec![1., 1.],
             None,
+            &token,
         );
         results.sort_by(|a, b| {
             let mut sort = b.score.partial_cmp(&a.score).unwrap();
@@ -68,19 +70,26 @@ pub mod test_util {
     /***
         Create a index with docucments with title fields, with increasing ids starting from 0
     */
-    pub fn build_test_index(titles: &[&str]) -> Index<usize> {
-        let mut idx: Index<usize> = create_index(1);
-        GhostToken::new(|token|  
-        {
-            for (index, title) in titles.iter().enumerate() {
-                let doc = Doc {
-                    id: index,
-                    title: title.to_string(),
-                };
-                add_document_to_index(&mut idx, &[title_extract], tokenizer, filter, doc.id, doc, token);
-            }
-            idx
-        })
-        
+    pub fn build_test_index<'arena, 'idx, 'idn>(
+        titles: &[&str],
+        token: &GhostToken<'idx>,
+    ) -> Index<'arena, 'idx, 'idn, usize> {
+        let mut idx = create_index(1);
+        for (index, title) in titles.iter().enumerate() {
+            let doc = Doc {
+                id: index,
+                title: title.to_string(),
+            };
+            add_document_to_index(
+                &mut idx,
+                &[title_extract],
+                tokenizer,
+                filter,
+                doc.id,
+                doc,
+                &mut token,
+            );
+        }
+        idx
     }
 }

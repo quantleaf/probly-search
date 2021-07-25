@@ -2,12 +2,7 @@
     https://en.wikipedia.org/wiki/Okapi_BM25
 */
 
-use std::{
-    cell::{Ref, RefCell},
-    collections::HashMap,
-    fmt::Debug,
-    rc::Rc,
-};
+use std::{collections::HashMap, fmt::Debug};
 
 use crate::{
     index::{DocumentDetails, DocumentPointer},
@@ -39,7 +34,7 @@ impl<T: Debug> ScoreCalculator<T, BM25TermCalculations> for BM25 {
         &mut self,
         term_expansion: &TermData,
         document_frequency: usize,
-        documents: &HashMap<T, Rc<RefCell<DocumentDetails<T>>>>,
+        documents: &HashMap<T, DocumentDetails<T>>,
     ) -> Option<BM25TermCalculations> {
         Some(BM25TermCalculations {
             expansion_boost: {
@@ -65,8 +60,8 @@ impl<T: Debug> ScoreCalculator<T, BM25TermCalculations> for BM25 {
     fn score(
         &mut self,
         before_output: Option<&BM25TermCalculations>,
-        document_pointer: &Ref<DocumentPointer<T>>,
-        document_details: &Ref<DocumentDetails<T>>,
+        document_pointer: &DocumentPointer<T>,
+        document_details: &DocumentDetails<T>,
         field_data: &FieldData,
         _: &TermData,
     ) -> Option<f64> {

@@ -1,5 +1,7 @@
 pub mod score;
 
+use typed_generational_arena::StandardArena;
+
 use crate::{
     index::*,
     query::score::calculator::ScoreCalculator,
@@ -12,7 +14,8 @@ use std::{
 };
 
 use self::score::calculator::{FieldData, TermData};
-
+extern crate typed_generational_arena;
+use typed_generational_arena::StandardIndex as ArenaIndex;
 /**
  * Query Result.
 
@@ -63,8 +66,8 @@ Arguments
 
 returns Array of QueryResult structs
 */
-pub fn query<'arena, T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
-    index: &mut Index<'arena, T>,
+pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
+    index: &mut Index<T>,
     query: &str,
     score_calculator: &mut S,
     tokenizer: Tokenizer,
@@ -80,36 +83,31 @@ pub fn query<'arena, T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
         let query_term = filter(query_term_pre_filter);
         print!("{}", query_term);
         if !query_term.is_empty() {
-            let expanded_terms = expand_term(index, &query_term);
+            let expanded_terms = expand_term(index, &query_term, &index.arena_index);
             let mut visited_documents_for_term: HashSet<T> = HashSet::new();
             for query_term_expanded in expanded_terms {
-                let term_node_option = find_inverted_index_node(
-                    unsafe { index.root.get().read() }.unwrap(),
-                    &query_term_expanded,
-                );
-                if let Some(term_node) = term_node_option {
+                let term_node_option =
+                    find_inverted_index_node(index.root, &query_term_expanded, &index.arena_index);
+                if let Some(term_node_index) = term_node_option {
+                    let term_node = index.arena_index.get_mut(term_node_index).unwrap();
                     let mut new_first_doc = None;
                     let mut assign_new_first_doc = false;
                     let mut document_frequency = 0;
 
-                    if let Some(term_node_option_first_doc) =
-                        unsafe { term_node.first_doc.get().read() }
-                    {
-                        let mut prev_pointer: Option<&DocumentPointer<'arena, T>> = None;
+                    if let Some(term_node_option_first_doc) = term_node.first_doc {
+                        let mut prev_pointer: Option<ArenaIndex<DocumentPointer<T>>> = None;
                         let mut pointer_option = Some(term_node_option_first_doc);
                         while let Some(pointer) = pointer_option {
-                            let pointer_value = pointer;
+                            let pointer_value = index.arena_doc.get(pointer).unwrap();
                             if removed.is_some() // Cleanup old removed documents while searching. If vaccume after delete, this will have not effect
                                 && removed
                                     .unwrap()
                                     .contains(&pointer_value.details_key)
                             {
-                                if let Some(pp) = &prev_pointer {
-                                    unsafe {
-                                        pp.next.get().replace(pointer_value.next.get().read());
-                                    }
+                                if let Some(pp) = prev_pointer {
+                                    index.arena_doc.get_mut(pp).unwrap().next = pointer_value.next;
                                 } else {
-                                    new_first_doc = unsafe { pointer_value.next.get().read() };
+                                    new_first_doc = pointer_value.next;
                                     assign_new_first_doc = true;
                                     //  term_node_borrowed.first_doc = (&pointer.get().next).clone();
                                 }
@@ -117,19 +115,15 @@ pub fn query<'arena, T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                                 prev_pointer = Some(pointer);
                                 document_frequency += 1;
                             }
-                            pointer_option = unsafe { pointer_value.next.get().read() };
+                            pointer_option = index.arena_doc.get(pointer).unwrap().next;
                         }
                     }
 
                     if assign_new_first_doc {
-                        unsafe {
-                            term_node.first_doc.get().replace(new_first_doc);
-                        }
+                        term_node.first_doc = new_first_doc;
                     }
 
-                    if let Some(term_node_option_first_doc) =
-                        unsafe { term_node.first_doc.get().read() }
-                    {
+                    if let Some(term_node_option_first_doc) = term_node.first_doc {
                         if document_frequency > 0 {
                             let term_expansion_data = TermData {
                                 all_query_terms: &query_terms,
@@ -144,7 +138,7 @@ pub fn query<'arena, T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
 
                             let mut pointer = Some(term_node_option_first_doc);
                             while let Some(p) = pointer {
-                                let pointer_borrowed = p;
+                                let pointer_borrowed = index.arena_doc.get(p).unwrap();
                                 let key = &pointer_borrowed.details_key;
                                 if removed.is_none() || !removed.unwrap().contains(key) {
                                     let score = &score_calculator.score(
@@ -167,7 +161,7 @@ pub fn query<'arena, T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                                         visited_documents_for_term.insert(key.to_owned());
                                     }
                                 }
-                                pointer = unsafe { pointer_borrowed.next.get().read() };
+                                pointer = pointer_borrowed.next;
                             }
                         }
                     }
@@ -194,11 +188,20 @@ Expands term with all possible combinations.
  * `term` Term.
 returns All terms that starts with `term` string.
  */
-fn expand_term<'arena, I: Debug>(index: &Index<'arena, I>, term: &str) -> Vec<String> {
-    let node = find_inverted_index_node(unsafe { index.root.get().read() }.unwrap(), term);
+fn expand_term<I: Debug>(
+    index: &Index<I>,
+    term: &str,
+    arena_index: &StandardArena<InvertedIndexNode<I>>,
+) -> Vec<String> {
+    let node = find_inverted_index_node(index.root, term, &index.arena_index);
     let mut results = Vec::new();
     if let Some(n) = node {
-        expand_term_from_node(n, &mut results, term);
+        expand_term_from_node(
+            index.arena_index.get(n).unwrap(),
+            &mut results,
+            term,
+            arena_index,
+        );
     }
 
     results
@@ -212,20 +215,22 @@ Recursively goes through inverted index nodes and expands term with all possible
  * `results Results.
  * `term Term.
  */
-fn expand_term_from_node<'arena, I: Debug>(
-    node: &'arena InvertedIndexNode<'arena, I>,
+fn expand_term_from_node<I: Debug>(
+    node: &InvertedIndexNode<I>,
     results: &mut Vec<String>,
     term: &str,
+    arena_index: &StandardArena<InvertedIndexNode<I>>,
 ) {
-    if unsafe { node.first_doc.get().read() }.is_some() {
+    if node.first_doc.is_some() {
         results.push(term.to_owned());
     }
-    let mut child = unsafe { node.first_child.get().read() };
-    while let Some(cb) = child {
+    let mut child = node.first_child;
+    while let Some(child_index) = child {
+        let cb = arena_index.get(child_index).unwrap();
         let mut inter = term.to_owned();
         inter.push(cb.char);
-        expand_term_from_node(cb, results, &inter); // String.fromCharCode(child.charCode)
-        child = unsafe { cb.next.get().read() };
+        expand_term_from_node(cb, results, &inter, arena_index); // String.fromCharCode(child.charCode)
+        child = cb.next;
     }
 }
 
@@ -265,8 +270,7 @@ mod tests {
 
         #[test]
         fn it_should_return_doc_1() {
-            let index_arenas = create_index_arenas();
-            let mut index = create_index::<usize>(2, &index_arenas);
+            let mut index = create_index::<usize>(2);
             let docs = vec![
                 Doc {
                     id: 1,
@@ -282,7 +286,6 @@ mod tests {
             for doc in docs {
                 add_document_to_index(
                     &mut index,
-                    &index_arenas,
                     &[title_extract, text_extract],
                     tokenizer,
                     filter,
@@ -309,8 +312,7 @@ mod tests {
 
         #[test]
         fn it_should_return_doc_1_and_2() {
-            let index_arenas = create_index_arenas();
-            let mut index = create_index::<usize>(2, &index_arenas);
+            let mut index = create_index::<usize>(2);
             let docs = vec![
                 Doc {
                     id: 1,
@@ -327,7 +329,6 @@ mod tests {
             for doc in docs {
                 add_document_to_index(
                     &mut index,
-                    &index_arenas,
                     &[title_extract, text_extract],
                     tokenizer,
                     filter,
@@ -367,8 +368,7 @@ mod tests {
 
         #[test]
         fn it_should_match_text_by_expanding() {
-            let index_arenas = create_index_arenas();
-            let mut index = create_index::<usize>(2, &index_arenas);
+            let mut index = create_index::<usize>(2);
             let docs = vec![
                 Doc {
                     id: 1,
@@ -385,7 +385,6 @@ mod tests {
             for doc in docs {
                 add_document_to_index(
                     &mut index,
-                    &index_arenas,
                     &[title_extract, text_extract],
                     tokenizer,
                     filter,
@@ -413,8 +412,7 @@ mod tests {
 
         #[test]
         fn it_should_use_filter_for_query() {
-            let index_arenas = create_index_arenas();
-            let mut index = create_index::<usize>(2, &index_arenas);
+            let mut index = create_index::<usize>(2);
             let docs = vec![
                 Doc {
                     id: 1,
@@ -431,7 +429,6 @@ mod tests {
             for doc in docs {
                 add_document_to_index(
                     &mut index,
-                    &index_arenas,
                     &[title_extract, text_extract],
                     tokenizer,
                     filter,
@@ -460,8 +457,7 @@ mod tests {
 
         #[test]
         fn it_should_use_token_separator_as_disjunction_operator() {
-            let index_arenas = create_index_arenas();
-            let mut index = create_index::<usize>(2, &index_arenas);
+            let mut index = create_index::<usize>(2);
             let docs = vec![
                 Doc {
                     id: 1,
@@ -478,7 +474,6 @@ mod tests {
             for doc in docs {
                 add_document_to_index(
                     &mut index,
-                    &index_arenas,
                     &[title_extract, text_extract],
                     tokenizer,
                     filter,
@@ -521,8 +516,7 @@ mod tests {
 
         #[test]
         fn it_should_expand_all() {
-            let index_arenas = create_index_arenas();
-            let mut index = create_index::<usize>(2, &index_arenas);
+            let mut index = create_index::<usize>(2);
             let docs: Vec<Doc> = vec![
                 Doc {
                     id: 1,
@@ -539,7 +533,6 @@ mod tests {
             for doc in docs {
                 add_document_to_index(
                     &mut index,
-                    &index_arenas,
                     &[title_extract, text_extract],
                     tokenizer,
                     filter,
@@ -547,52 +540,13 @@ mod tests {
                     doc,
                 );
             }
-            let exp = expand_term(&index, &"a".to_string());
+            let exp = expand_term(&index, &"a".to_string(), &index.arena_index);
             assert_eq!(exp, vec!["adef".to_string(), "abc".to_string()]);
         }
 
         #[test]
-        fn it_should_expand_all_2() {
-            let index_arenas = create_index_arenas();
-            let mut index = create_index::<usize>(1, &index_arenas);
-            struct DocS {
-                id: usize,
-                title: String,
-            }
-            let docs: Vec<DocS> = vec![
-                DocS {
-                    id: 1,
-                    title: "ab".to_string(),
-                },
-                DocS {
-                    id: 2,
-                    title: "ac".to_string(),
-                },
-            ];
-
-            fn title_extract_s(d: &DocS) -> Option<&str> {
-                Some(d.title.as_str())
-            }
-
-            for doc in docs {
-                add_document_to_index(
-                    &mut index,
-                    &index_arenas,
-                    &[title_extract_s],
-                    tokenizer,
-                    filter,
-                    doc.id,
-                    doc,
-                );
-            }
-            let exp = expand_term(&index, &"a".to_string());
-            assert_eq!(exp, vec!["ac".to_string(), "ab".to_string()]);
-        }
-
-        #[test]
         fn it_should_not_expand() {
-            let index_arenas = create_index_arenas();
-            let mut index = create_index::<usize>(2, &index_arenas);
+            let mut index = create_index::<usize>(2);
             let docs = vec![
                 Doc {
                     id: 1,
@@ -609,7 +563,6 @@ mod tests {
             for doc in docs {
                 add_document_to_index(
                     &mut index,
-                    &index_arenas,
                     &[title_extract, text_extract],
                     tokenizer,
                     filter,
@@ -617,7 +570,7 @@ mod tests {
                     doc,
                 );
             }
-            let exp = expand_term(&index, &"x".to_string());
+            let exp = expand_term(&index, &"x".to_string(), &index.arena_index);
             assert_eq!(exp, Vec::new() as Vec<String>);
         }
     }

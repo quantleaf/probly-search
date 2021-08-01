@@ -1,5 +1,4 @@
-/*use std::{
-    borrow::BorrowMut,
+use std::{
     collections::HashSet,
     sync::{Arc, Mutex},
 };
@@ -32,13 +31,13 @@ fn description_extract(d: &Doc) -> Option<&str> {
     Some(d.description.as_str())
 }
 
-fn filter(s: &String) -> String {
+fn filter(s: &str) -> String {
     s.to_owned()
 }
 
 #[test]
 pub fn test_add_query_delete_bm25() {
-    let mut x = create_index::<usize>(2);
+    let mut index = create_index::<usize>(2);
 
     let doc_1 = Doc {
         id: 0,
@@ -53,9 +52,7 @@ pub fn test_add_query_delete_bm25() {
     };
 
     add_document_to_index(
-        &mut x.index,
-        &x.arena_index,
-        &x.arena_doc,
+        &mut index,
         &[title_extract, description_extract],
         tokenizer,
         filter,
@@ -64,9 +61,7 @@ pub fn test_add_query_delete_bm25() {
     );
 
     add_document_to_index(
-        &mut x.index,
-        &x.arena_index,
-        &x.arena_doc,
+        &mut index,
         &[title_extract, description_extract],
         tokenizer,
         filter,
@@ -76,7 +71,7 @@ pub fn test_add_query_delete_bm25() {
 
     // Search, expected 2 results
     let mut result = query(
-        &mut x.index,
+        &mut index,
         &"abc",
         &mut bm25::new(),
         tokenizer,
@@ -101,11 +96,11 @@ pub fn test_add_query_delete_bm25() {
     );
 
     let mut removed_docs = HashSet::new();
-    remove_document_from_index(&mut x.index, &mut removed_docs, doc_1.id);
+    remove_document_from_index(&mut index, &mut removed_docs, doc_1.id);
 
     // Search, expect 1 result
     result = query(
-        &mut x.index,
+        &mut index,
         &"abc",
         &mut bm25::new(),
         tokenizer,
@@ -125,7 +120,7 @@ pub fn test_add_query_delete_bm25() {
 
 #[test]
 pub fn test_add_query_delete_zero_to_one() {
-    let mut x = create_index::<usize>(2);
+    let mut index = create_index::<usize>(2);
 
     let doc_1 = Doc {
         id: 0,
@@ -140,9 +135,7 @@ pub fn test_add_query_delete_zero_to_one() {
     };
 
     add_document_to_index(
-        &mut x.index,
-        &x.arena_index,
-        &x.arena_doc,
+        &mut index,
         &[title_extract, description_extract],
         tokenizer,
         filter,
@@ -151,9 +144,7 @@ pub fn test_add_query_delete_zero_to_one() {
     );
 
     add_document_to_index(
-        &mut x.index,
-        &x.arena_index,
-        &x.arena_doc,
+        &mut index,
         &[title_extract, description_extract],
         tokenizer,
         filter,
@@ -163,7 +154,7 @@ pub fn test_add_query_delete_zero_to_one() {
 
     // Search, expected 2 results
     let mut result = query(
-        &mut x.index,
+        &mut index,
         &"abc",
         &mut zero_to_one::new(),
         tokenizer,
@@ -182,11 +173,11 @@ pub fn test_add_query_delete_zero_to_one() {
     );
 
     let mut removed_docs = HashSet::new();
-    remove_document_from_index(&mut x.index, &mut removed_docs, doc_1.id);
+    remove_document_from_index(&mut index, &mut removed_docs, doc_1.id);
 
     // Search, expect 1 result
     result = query(
-        &mut x.index,
+        &mut index,
         &"abc",
         &mut zero_to_one::new(),
         tokenizer,
@@ -202,12 +193,12 @@ pub fn test_add_query_delete_zero_to_one() {
             score: 0.75
         }
     );
-}*/
-/*
+}
+
 #[test]
 pub fn it_is_thread_safe() {
     struct ThreadSafeIndex {
-        index: Arc<Mutex<Index<'arena, usize>>>,
+        index: Arc<Mutex<Index<usize>>>,
     }
 
     fn new() -> ThreadSafeIndex {
@@ -216,7 +207,7 @@ pub fn it_is_thread_safe() {
         }
     }
     lazy_static::lazy_static! {
-      static ref IDX: ThreadSafeIndex = new();
+        static ref IDX: ThreadSafeIndex = new();
     }
     let doc_1 = Doc {
         id: 0,
@@ -224,7 +215,7 @@ pub fn it_is_thread_safe() {
         description: "dfg".to_string(),
     };
     add_document_to_index(
-        IDX.index.lock().unwrap().borrow_mut(),
+        &mut *IDX.index.lock().unwrap(),
         &[title_extract, description_extract],
         tokenizer,
         filter,
@@ -232,4 +223,3 @@ pub fn it_is_thread_safe() {
         doc_1.clone(),
     );
 }
-*/

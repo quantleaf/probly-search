@@ -3,7 +3,7 @@
 [Latest Version]: https://img.shields.io/crates/v/probly-search.svg
 [crates.io]: https://crates.io/crates/probly-search
 
-A lightweight and thread-safe, full-text search library that provides full control over the scoring calculations.
+A full-text search library, optimized for insertion speed, that provides full control over the scoring calculations.
 
 This start initially as a port of the Node library [NDX](https://github.com/ndx-search/ndx).
 
@@ -20,11 +20,12 @@ https://quantleaf.github.io/probly-search-demo/
 
 - [Trie](https://en.wikipedia.org/wiki/Trie) based dynamic
   [Inverted Index](https://en.wikipedia.org/wiki/Inverted_index).
-- Small memory footprint, optimized for mobile devices.
 - Multiple fields full-text indexing and searching.
 - Per-field score boosting.
 - Configurable tokenizer and term filter.
 - Free text queries with query expansion.
+- Fast allocation, insertion.
+- (Con) Document deletion, but you need to rebuild the index to clear up all the used memory.
 
 
 ## Documentation 

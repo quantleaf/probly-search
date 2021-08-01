@@ -6,10 +6,9 @@ pub mod utils;
 pub mod test_util {
 
     use crate::{
-        index::{add_document_to_index, initialize, FieldDetails, Index, IndexArenas},
+        index::{add_document_to_index, create_index, Index},
         query::{query, score::calculator::ScoreCalculator, QueryResult},
     };
-    use std::{cell::UnsafeCell, collections::HashMap};
     fn approx_equal(a: f64, b: f64, dp: u8) -> bool {
         let p: f64 = 10f64.powf(-(dp as f64));
 
@@ -34,7 +33,7 @@ pub mod test_util {
     }
 
     pub fn test_score<'arena, M, S: ScoreCalculator<usize, M>>(
-        mut idx: &mut Index<'arena, usize>,
+        mut idx: &mut Index<usize>,
         score_calculator: &mut S,
         q: &str,
         expected: Vec<QueryResult<usize>>,
@@ -65,31 +64,14 @@ pub mod test_util {
         Create a index with docucments with title fields, with increasing ids starting from 0
     */
 
-    pub fn build_test_index<'arena>(
-        titles: &[&str],
-        index_arenas: &'arena IndexArenas<'arena, usize>,
-    ) -> Index<'arena, usize> {
-        let fields: Vec<FieldDetails> = vec![FieldDetails { sum: 0, avg: 0_f64 }; 1];
-        let mut index: Index<usize> = Index {
-            docs: HashMap::new(),
-            root: UnsafeCell::new(None),
-            fields,
-        };
-        initialize(&index, index_arenas);
+    pub fn build_test_index<'arena>(titles: &[&str]) -> Index<usize> {
+        let mut index: Index<usize> = create_index(1);
         for (i, title) in titles.iter().enumerate() {
             let doc = Doc {
                 id: i,
                 title: title.to_string(),
             };
-            add_document_to_index(
-                &mut index,
-                &index_arenas,
-                &[title_extract],
-                tokenizer,
-                filter,
-                doc.id,
-                doc,
-            );
+            add_document_to_index(&mut index, &[title_extract], tokenizer, filter, doc.id, doc);
         }
         index
     }

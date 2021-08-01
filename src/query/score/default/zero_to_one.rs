@@ -103,18 +103,12 @@ impl<T: Debug + Eq + Hash + Clone> ScoreCalculator<T, ZeroToOneBeforeCalculation
 #[cfg(test)]
 mod tests {
 
-    
-
     use super::*;
-    use crate::{
-        index::{create_index_arenas},
-        test_util::{build_test_index, test_score},
-    };
+    use crate::test_util::{build_test_index, test_score};
 
     #[test]
     fn it_should_perform_partial_matching() {
-        let index_arenas = create_index_arenas();
-        let mut x = build_test_index(&["abc", "abcefg"], &index_arenas);
+        let mut x = build_test_index(&["abc", "abcefg"]);
         test_score(
             &mut x,
             &mut new(),
@@ -134,8 +128,7 @@ mod tests {
 
     #[test]
     fn it_should_penalize_repeating_query_terms() {
-        let index_arenas = create_index_arenas();
-        let mut x = build_test_index(&["abc"], &index_arenas);
+        let mut x = build_test_index(&["abc"]);
         test_score(
             &mut x,
             &mut new(),
@@ -149,8 +142,7 @@ mod tests {
 
     #[test]
     fn it_should_not_penalize_repeating_document_terms() {
-        let index_arenas = create_index_arenas();
-        let mut x = build_test_index(&["abc abc"], &index_arenas);
+        let mut x = build_test_index(&["abc abc"]);
         test_score(
             &mut x,
             &mut new(),
@@ -164,17 +156,13 @@ mod tests {
 
     #[test]
     fn it_should_retrieve_multiple_results() {
-        let index_arenas = create_index_arenas();
-        let mut x = build_test_index(
-            &[
-                "abcdef",
-                "abc abcdef",
-                "abcdef abcdef",
-                "abcdef abcdefghi",
-                "def abcdef",
-            ],
-            &index_arenas,
-        );
+        let mut x = build_test_index(&[
+            "abcdef",
+            "abc abcdef",
+            "abcdef abcdef",
+            "abcdef abcdefghi",
+            "def abcdef",
+        ]);
 
         test_score(
             &mut x,
@@ -207,17 +195,13 @@ mod tests {
 
     #[test]
     fn it_should_retrieve_multiple_results_and_penalize_repeating_query_terms() {
-        let index_arenas = create_index_arenas();
-        let mut x = build_test_index(
-            &[
-                "abcdef",
-                "abc abcdef",
-                "abcdef abcdef",
-                "abcdef abcdefghi",
-                "def abcdef",
-            ],
-            &index_arenas,
-        );
+        let mut x = build_test_index(&[
+            "abcdef",
+            "abc abcdef",
+            "abcdef abcdef",
+            "abcdef abcdefghi",
+            "def abcdef",
+        ]);
 
         test_score(
             &mut x,

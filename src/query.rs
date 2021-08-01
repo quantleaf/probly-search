@@ -90,37 +90,30 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                     find_inverted_index_node(index.root, &query_term_expanded, &index.arena_index);
                 if let Some(term_node_index) = term_node_option {
                     let term_node = index.arena_index.get_mut(term_node_index).unwrap();
-                    let mut new_first_doc = None;
-                    let mut assign_new_first_doc = false;
                     let mut document_frequency = 0;
-
                     if let Some(term_node_option_first_doc) = term_node.first_doc {
                         let mut prev_pointer: Option<ArenaIndex<DocumentPointer<T>>> = None;
                         let mut pointer_option = Some(term_node_option_first_doc);
                         while let Some(pointer) = pointer_option {
                             let pointer_value = index.arena_doc.get(pointer).unwrap();
-                            if removed.is_some() // Cleanup old removed documents while searching. If vaccume after delete, this will have not effect
-                                && removed
-                                    .unwrap()
-                                    .contains(&pointer_value.details_key)
-                            {
+                            let is_removed = removed.is_some()
+                                && removed.unwrap().contains(&pointer_value.details_key);
+                            if is_removed {
+                                // Cleanup old removed documents while searching. If vaccume after delete, this will have not effect
                                 if let Some(pp) = prev_pointer {
                                     index.arena_doc.get_mut(pp).unwrap().next = pointer_value.next;
                                 } else {
-                                    new_first_doc = pointer_value.next;
-                                    assign_new_first_doc = true;
-                                    //  term_node_borrowed.first_doc = (&pointer.get().next).clone();
+                                    term_node.first_doc = pointer_value.next;
                                 }
                             } else {
                                 prev_pointer = Some(pointer);
                                 document_frequency += 1;
                             }
                             pointer_option = index.arena_doc.get(pointer).unwrap().next;
+                            if is_removed {
+                                index.arena_doc.remove(pointer);
+                            }
                         }
-                    }
-
-                    if assign_new_first_doc {
-                        term_node.first_doc = new_first_doc;
                     }
 
                     if let Some(term_node_option_first_doc) = term_node.first_doc {

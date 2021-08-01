@@ -48,13 +48,31 @@ Creates an Index.
  * returns `Index`
  */
 pub fn create_index<T>(fields_num: usize) -> Index<T> {
+    create_index_with_capacity(fields_num, 1000, 10000)
+}
+/**
+Creates an Index.
+ * typeparam `T` Document key.
+ * `fieldsNum` Number of fields.
+ * `expected_index_size` Expected node count of index tree.
+ * `expected_documents_count` Expected amount of documents added
+ * returns `Index`
+ */
+pub fn create_index_with_capacity<T>(
+    fields_num: usize,
+    expected_index_size: usize,
+    expected_documents_count: usize,
+) -> Index<T> {
     let fields: Vec<FieldDetails> = vec![FieldDetails { sum: 0, avg: 0_f64 }; fields_num];
     let mut arena_index = StandardArena::new();
+    arena_index.reserve(expected_index_size);
+    let mut arena_doc = StandardArena::new();
+    arena_doc.reserve(expected_documents_count);
     Index {
         docs: HashMap::new(),
         root: arena_index.insert(create_inverted_index_node(&char::from_u32(0).unwrap())),
         fields,
-        arena_doc: StandardArena::new(),
+        arena_doc,
         arena_index,
     }
 }
@@ -447,7 +465,8 @@ fn vacuum_node<T: Hash + Eq>(
     let node = index.arena_index.get_mut(node_index).unwrap();
     let mut pointer_option = node.first_doc;
     while let Some(pointer) = pointer_option {
-        if removed.contains(&index.arena_doc.get(pointer).unwrap().details_key) {
+        let is_removed = removed.contains(&index.arena_doc.get(pointer).unwrap().details_key);
+        if is_removed {
             match &prev_pointer {
                 None => {
                     node.first_doc = index.arena_doc.get(pointer).unwrap().next;
@@ -461,6 +480,9 @@ fn vacuum_node<T: Hash + Eq>(
             prev_pointer = Some(pointer);
         }
         pointer_option = index.arena_doc.get(pointer).unwrap().next;
+        if is_removed {
+            index.arena_doc.remove(pointer);
+        }
     }
 
     let mut prev_child: Option<ArenaIndex<InvertedIndexNode<T>>> = None;
@@ -468,27 +490,32 @@ fn vacuum_node<T: Hash + Eq>(
     if node.first_doc.is_some() {
         ret = 1;
     }
-    /*
+
     let mut child_option = node.first_child;
     while let Some(child_index) = child_option {
         let r = vacuum_node(index, child_index, removed);
-        let child = index.arena_index.get(child_index).unwrap();
         ret |= r;
         if r == 0 {
             // subtree doesn't have any documents, remove this node
             match prev_child {
                 Some(prev) => {
-                    index.arena_index.get_mut(prev).unwrap().next = child.next;
+                    index.arena_index.get_mut(prev).unwrap().next =
+                        index.arena_index.get(child_index).unwrap().next;
                 }
                 None => {
-                    node.first_child = child.next;
+                    index.arena_index.get_mut(node_index).unwrap().first_child =
+                        index.arena_index.get(child_index).unwrap().next;
                 }
             }
         } else {
             prev_child = Some(child_index);
         }
-        child_option = child.next;
-    }*/
+        child_option = index.arena_index.get(child_index).unwrap().next;
+
+        if r == 0 {
+            index.arena_index.remove(child_index);
+        }
+    }
     ret
 }
 
@@ -696,6 +723,8 @@ mod tests {
         #[test]
         fn it_should_delete_1() {
             let mut index = create_index::<usize>(1);
+            assert_eq!(index.arena_doc.is_empty(), true);
+
             let mut removed = HashSet::new();
             let docs = vec![Doc {
                 id: 1,
@@ -712,6 +741,7 @@ mod tests {
                     doc,
                 )
             }
+
             remove_document_from_index(&mut index, &mut removed, 1);
             vacuum_index(&mut index, &mut removed);
 
@@ -728,6 +758,11 @@ mod tests {
                 next: None,
             };
             assert_eq!(x, y);
+
+            // Delete root from index and assert is empty
+            index.arena_index.remove(index.root);
+            assert_eq!(index.arena_doc.is_empty(), true);
+            assert_eq!(index.arena_index.is_empty(), true);
         }
     }
     mod find {
@@ -865,7 +900,7 @@ mod tests {
 
             #[test]
             fn it_should_count_nodes_empty() {
-                let mut index = create_index::<usize>(1);
+                let index = create_index::<usize>(1);
                 assert_eq!(count_nodes(&index), 1); // 1 for root
             }
         }

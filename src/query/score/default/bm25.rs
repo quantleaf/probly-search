@@ -96,17 +96,20 @@ impl<T: Debug> ScoreCalculator<T, BM25TermCalculations> for BM25 {
 #[cfg(test)]
 mod tests {
 
+    use typed_arena::Arena;
+
     use super::*;
     use crate::{
-        index::Index,
+        index::{create_index_arenas, Index, IndexArenas},
         query::QueryResult,
         test_util::{build_test_index, test_score},
     };
     #[test]
     fn it_should_return_doc_1() {
-        let mut idx: Index<usize> = build_test_index(&["a b c", "c d e"]);
+        let index_arenas: IndexArenas<usize> = create_index_arenas();
+        let mut x = build_test_index(&["a b c", "c d e"], &index_arenas);
         test_score(
-            &mut idx,
+            &mut x,
             &mut new(),
             &"a".to_string(),
             vec![QueryResult {
@@ -118,9 +121,10 @@ mod tests {
 
     #[test]
     fn it_should_return_doc_1_and_2() {
-        let mut idx: Index<usize> = build_test_index(&["a b c", "c d e"]);
+        let index_arenas = create_index_arenas();
+        let mut x = build_test_index(&["a b c", "c d e"], &index_arenas);
         test_score(
-            &mut idx,
+            &mut x,
             &mut new(),
             &"c".to_string(),
             vec![

@@ -8,11 +8,9 @@
     -   We want the query term lengths to match the document term lengths
 */
 use std::{
-    cell::Ref,
     collections::{HashMap, HashSet},
     fmt::Debug,
     hash::Hash,
-    sync::MutexGuard,
 };
 
 use crate::{
@@ -105,17 +103,20 @@ impl<T: Debug + Eq + Hash + Clone> ScoreCalculator<T, ZeroToOneBeforeCalculation
 #[cfg(test)]
 mod tests {
 
+    use typed_arena::Arena;
+
     use super::*;
     use crate::{
-        index::Index,
+        index::{create_index_arenas, Index},
         test_util::{build_test_index, test_score},
     };
 
     #[test]
     fn it_should_perform_partial_matching() {
-        let mut idx: Index<usize> = build_test_index(&["abc", "abcefg"]);
+        let index_arenas = create_index_arenas();
+        let mut x = build_test_index(&["abc", "abcefg"], &index_arenas);
         test_score(
-            &mut idx,
+            &mut x,
             &mut new(),
             &"abc".to_string(),
             vec![
@@ -133,9 +134,10 @@ mod tests {
 
     #[test]
     fn it_should_penalize_repeating_query_terms() {
-        let mut idx = build_test_index(&["abc"]);
+        let index_arenas = create_index_arenas();
+        let mut x = build_test_index(&["abc"], &index_arenas);
         test_score(
-            &mut idx,
+            &mut x,
             &mut new(),
             &"abc abc".to_string(),
             vec![QueryResult {
@@ -147,9 +149,10 @@ mod tests {
 
     #[test]
     fn it_should_not_penalize_repeating_document_terms() {
-        let mut idx = build_test_index(&["abc abc"]);
+        let index_arenas = create_index_arenas();
+        let mut x = build_test_index(&["abc abc"], &index_arenas);
         test_score(
-            &mut idx,
+            &mut x,
             &mut new(),
             &"abc".to_string(),
             vec![QueryResult {
@@ -161,16 +164,20 @@ mod tests {
 
     #[test]
     fn it_should_retrieve_multiple_results() {
-        let mut idx = build_test_index(&[
-            "abcdef",
-            "abc abcdef",
-            "abcdef abcdef",
-            "abcdef abcdefghi",
-            "def abcdef",
-        ]);
+        let index_arenas = create_index_arenas();
+        let mut x = build_test_index(
+            &[
+                "abcdef",
+                "abc abcdef",
+                "abcdef abcdef",
+                "abcdef abcdefghi",
+                "def abcdef",
+            ],
+            &index_arenas,
+        );
 
         test_score(
-            &mut idx,
+            &mut x,
             &mut new(),
             &"abc".to_string(),
             vec![
@@ -200,16 +207,20 @@ mod tests {
 
     #[test]
     fn it_should_retrieve_multiple_results_and_penalize_repeating_query_terms() {
-        let mut idx = build_test_index(&[
-            "abcdef",
-            "abc abcdef",
-            "abcdef abcdef",
-            "abcdef abcdefghi",
-            "def abcdef",
-        ]);
+        let index_arenas = create_index_arenas();
+        let mut x = build_test_index(
+            &[
+                "abcdef",
+                "abc abcdef",
+                "abcdef abcdef",
+                "abcdef abcdefghi",
+                "def abcdef",
+            ],
+            &index_arenas,
+        );
 
         test_score(
-            &mut idx,
+            &mut x,
             &mut new(),
             &"abc abc".to_string(),
             vec![

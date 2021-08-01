@@ -1,13 +1,8 @@
 use crate::{
-    index::{DocumentDetails, DocumentPointer, DocumentPointerRef, FieldDetails},
+    index::{DocumentDetails, DocumentPointer, FieldDetails},
     query::QueryResult,
 };
-use std::{
-    cell::{Ref, RefCell},
-    collections::HashMap,
-    fmt::Debug,
-    rc::Rc,
-};
+use std::{collections::HashMap, fmt::Debug};
 
 pub struct TermData<'a> {
     // The current query term

@@ -1,5 +1,9 @@
+use std::cell::UnsafeCell;
+
 use criterion::{criterion_group, criterion_main, Criterion};
-use probly_search::index::{add_document_to_index, create_index, Index};
+use probly_search::index::{
+    add_document_to_index, create_index, create_index_arenas, Index, IndexArenas,
+};
 
 criterion_group!(benches, test_speed);
 criterion_main!(benches);
@@ -39,7 +43,10 @@ pub fn test_speed(c: &mut Criterion) {
     }
 
     c.bench_function("add_100k_docs", |b| {
-        let mut idx: Index<usize> = create_index(1);
+        let index_arenas = create_index_arenas();
+        let mut index = create_index(1, &index_arenas);
+
+        //let x: UnsafeCell<&mut IndexBase<usize>> = UnsafeCell::new(&mut index);
         let mut random_strings: Vec<String> = Vec::new();
         for _ in 1..100000 {
             let mut new_rand = generate_string(0, 4);
@@ -49,20 +56,35 @@ pub fn test_speed(c: &mut Criterion) {
         }
         // whatever you want to do
         let extractor = [title_extract_x as fn(&_) -> Option<&str>];
-        b.iter(|| add_all_documents(&mut idx, &extractor, &&random_strings));
+        b.iter(|| add_all_documents(&mut index, &index_arenas, &extractor, &&random_strings));
     });
 }
 
-fn add_all_documents(
-    mut idx: &mut Index<usize>,
+fn add_all_documents<'arena>(
+    //basex: &UnsafeCell<&'arena mut IndexBase<'arena, usize>>,
+    mut index: &mut Index<'arena, usize>,
+    index_arenas: &'arena IndexArenas<'arena, usize>,
     extractor: &[fn(&DocX) -> Option<&str>],
     random_strings: &Vec<String>,
 ) {
+    //let mut base = unsafe { basex.get().read() };
     for (i, s) in random_strings.iter().enumerate() {
         let d = DocX {
             id: i,
             title: s.to_owned(),
         };
-        add_document_to_index(&mut idx, &extractor, tokenizer, filter, d.id, d);
+        add_document_to_index(
+            /*&mut base.index,
+            &base.arena_index,
+            &base.arena_doc,*/
+            &mut index,
+            &index_arenas.arena_index,
+            &index_arenas.arena_doc,
+            &extractor,
+            tokenizer,
+            filter,
+            d.id,
+            d,
+        );
     }
 }

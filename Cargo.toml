@@ -14,7 +14,6 @@ categories = ["text-processing"]
 exclude = [".github/**", ".gitignore", ".rustfmt.toml"]
 
 [dependencies]
-ghost-cell = "0.2.2"
 typed-arena = "2.0.1"
 
 [dev-dependencies]
@@ -27,3 +26,8 @@ criterion = {version ="0.3" , features  = ["html_reports"]}
 [[bench]]
 name = "test_benchmark"
 harness = false
+
+
+[profile.dev]
+opt-level = 0
+debug = true

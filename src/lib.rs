@@ -5,12 +5,11 @@ pub mod utils;
 #[cfg(test)]
 pub mod test_util {
 
-    use ghost_cell::GhostToken;
-
     use crate::{
-        index::{add_document_to_index, create_index, Index},
+        index::{add_document_to_index, initialize, FieldDetails, Index, IndexArenas},
         query::{query, score::calculator::ScoreCalculator, QueryResult},
     };
+    use std::{cell::UnsafeCell, collections::HashMap};
     fn approx_equal(a: f64, b: f64, dp: u8) -> bool {
         let p: f64 = 10f64.powf(-(dp as f64));
 
@@ -38,22 +37,21 @@ pub mod test_util {
         s.to_owned()
     }
 
-    pub fn test_score<'arena, 'idx, 'idn, M, S: ScoreCalculator<usize, M>>(
-        mut idx: &mut Index<'arena, 'idx, 'idn, usize>,
+    pub fn test_score<'arena, M, S: ScoreCalculator<usize, M>>(
+        mut idx: &mut Index<'arena, usize>,
         score_calculator: &mut S,
         q: &str,
         expected: Vec<QueryResult<usize>>,
-        token: &GhostToken<'idx>,
     ) {
+        let fields_len = idx.fields.len();
         let mut results = query(
             &mut idx,
             q,
             score_calculator,
             tokenizer,
             filter,
-            &vec![1., 1.],
+            &vec![1.; fields_len],
             None,
-            &token,
         );
         results.sort_by(|a, b| {
             let mut sort = b.score.partial_cmp(&a.score).unwrap();
@@ -70,26 +68,34 @@ pub mod test_util {
     /***
         Create a index with docucments with title fields, with increasing ids starting from 0
     */
-    pub fn build_test_index<'arena, 'idx, 'idn>(
+
+    pub fn build_test_index<'arena>(
         titles: &[&str],
-        token: &GhostToken<'idx>,
-    ) -> Index<'arena, 'idx, 'idn, usize> {
-        let mut idx = create_index(1);
-        for (index, title) in titles.iter().enumerate() {
+        index_arenas: &'arena IndexArenas<'arena, usize>,
+    ) -> Index<'arena, usize> {
+        let fields: Vec<FieldDetails> = vec![FieldDetails { sum: 0, avg: 0_f64 }; 1];
+        let mut index: Index<usize> = Index {
+            docs: HashMap::new(),
+            root: UnsafeCell::new(None),
+            fields,
+        };
+        initialize(&index, &index_arenas);
+        for (i, title) in titles.iter().enumerate() {
             let doc = Doc {
-                id: index,
+                id: i,
                 title: title.to_string(),
             };
             add_document_to_index(
-                &mut idx,
+                &mut index,
+                &index_arenas.arena_index,
+                &index_arenas.arena_doc,
                 &[title_extract],
                 tokenizer,
                 filter,
                 doc.id,
                 doc,
-                &mut token,
             );
         }
-        idx
+        index
     }
 }

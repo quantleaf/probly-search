@@ -47,7 +47,7 @@ impl<T: Debug + Eq + Hash + Clone> ScoreCalculator<T, ZeroToOneBeforeCalculation
         */
         let key = &document_details.key;
         let mut has_key = false;
-        let contains_term_on_key = match self.visited_terms_by_document.get(&key) {
+        let contains_term_on_key = match self.visited_terms_by_document.get(key) {
             Some(terms) => {
                 has_key = true;
                 terms.contains(term_data.query_term)
@@ -61,7 +61,7 @@ impl<T: Debug + Eq + Hash + Clone> ScoreCalculator<T, ZeroToOneBeforeCalculation
 
         // Add term to visited
         self.visited_terms_by_document
-            .get_mut(&key)
+            .get_mut(key)
             .unwrap()
             .insert(term_data.query_term.to_owned());
 
@@ -103,11 +103,11 @@ impl<T: Debug + Eq + Hash + Clone> ScoreCalculator<T, ZeroToOneBeforeCalculation
 #[cfg(test)]
 mod tests {
 
-    use typed_arena::Arena;
+    
 
     use super::*;
     use crate::{
-        index::{create_index_arenas, Index},
+        index::{create_index_arenas},
         test_util::{build_test_index, test_score},
     };
 
@@ -141,7 +141,7 @@ mod tests {
             &mut new(),
             &"abc abc".to_string(),
             vec![QueryResult {
-                key: 0 as usize,
+                key: 0_usize,
                 score: 0.5_f64,
             }],
         );
@@ -156,7 +156,7 @@ mod tests {
             &mut new(),
             &"abc".to_string(),
             vec![QueryResult {
-                key: 0 as usize,
+                key: 0_usize,
                 score: 1_f64,
             }],
         );
@@ -182,23 +182,23 @@ mod tests {
             &"abc".to_string(),
             vec![
                 QueryResult {
-                    key: 0 as usize,
+                    key: 0_usize,
                     score: 0.5_f64,
                 },
                 QueryResult {
-                    key: 1 as usize,
+                    key: 1_usize,
                     score: 0.5_f64,
                 },
                 QueryResult {
-                    key: 2 as usize,
+                    key: 2_usize,
                     score: 0.5_f64,
                 },
                 QueryResult {
-                    key: 3 as usize,
+                    key: 3_usize,
                     score: 0.25_f64,
                 },
                 QueryResult {
-                    key: 4 as usize,
+                    key: 4_usize,
                     score: 0.25_f64,
                 },
             ],
@@ -225,23 +225,23 @@ mod tests {
             &"abc abc".to_string(),
             vec![
                 QueryResult {
-                    key: 1 as usize,
+                    key: 1_usize,
                     score: 0.5_f64,
                 },
                 QueryResult {
-                    key: 2 as usize,
+                    key: 2_usize,
                     score: 0.5_f64,
                 },
                 QueryResult {
-                    key: 0 as usize,
+                    key: 0_usize,
                     score: 0.25_f64,
                 },
                 QueryResult {
-                    key: 3 as usize,
+                    key: 3_usize,
                     score: 0.25_f64,
                 },
                 QueryResult {
-                    key: 4 as usize,
+                    key: 4_usize,
                     score: 0.25_f64,
                 },
             ],

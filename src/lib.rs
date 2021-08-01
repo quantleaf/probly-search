@@ -13,11 +13,7 @@ pub mod test_util {
     fn approx_equal(a: f64, b: f64, dp: u8) -> bool {
         let p: f64 = 10f64.powf(-(dp as f64));
 
-        if (a - b).abs() < p {
-            return true;
-        } else {
-            return false;
-        }
+        (a - b).abs() < p
     }
 
     struct Doc {
@@ -33,7 +29,7 @@ pub mod test_util {
         Some(d.title.as_str())
     }
 
-    fn filter(s: &String) -> String {
+    fn filter(s: &str) -> String {
         s.to_owned()
     }
 
@@ -56,7 +52,7 @@ pub mod test_util {
         results.sort_by(|a, b| {
             let mut sort = b.score.partial_cmp(&a.score).unwrap();
             sort = sort.then_with(|| a.key.partial_cmp(&b.key).unwrap());
-            return sort;
+            sort
         });
 
         for (index, result) in results.iter().enumerate() {
@@ -79,7 +75,7 @@ pub mod test_util {
             root: UnsafeCell::new(None),
             fields,
         };
-        initialize(&index, &index_arenas);
+        initialize(&index, index_arenas);
         for (i, title) in titles.iter().enumerate() {
             let doc = Doc {
                 id: i,
@@ -87,8 +83,7 @@ pub mod test_util {
             };
             add_document_to_index(
                 &mut index,
-                &index_arenas.arena_index,
-                &index_arenas.arena_doc,
+                &index_arenas,
                 &[title_extract],
                 tokenizer,
                 filter,

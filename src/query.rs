@@ -74,13 +74,13 @@ pub fn query<'arena, T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
 ) -> Vec<QueryResult<T>> {
     let docs = &index.docs;
     let fields = &index.fields;
-    let query_terms = tokenizer(&query);
+    let query_terms = tokenizer(query);
     let mut scores: HashMap<T, f64> = HashMap::new();
     for query_term_pre_filter in &query_terms {
-        let query_term = filter(&query_term_pre_filter);
+        let query_term = filter(query_term_pre_filter);
         print!("{}", query_term);
         if !query_term.is_empty() {
-            let expanded_terms = expand_term(&index, &query_term);
+            let expanded_terms = expand_term(index, &query_term);
             let mut visited_documents_for_term: HashSet<T> = HashSet::new();
             for query_term_expanded in expanded_terms {
                 let term_node_option = find_inverted_index_node(
@@ -146,10 +146,10 @@ pub fn query<'arena, T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                             while let Some(p) = pointer {
                                 let pointer_borrowed = p;
                                 let key = &pointer_borrowed.details_key;
-                                if removed.is_none() || !removed.unwrap().contains(&key) {
+                                if removed.is_none() || !removed.unwrap().contains(key) {
                                     let score = &score_calculator.score(
                                         pre_calculations.as_ref(),
-                                        &pointer_borrowed,
+                                        pointer_borrowed,
                                         index.docs.get(key).unwrap(),
                                         &FieldData {
                                             fields_boost,
@@ -160,8 +160,8 @@ pub fn query<'arena, T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                                     if let Some(s) = score {
                                         let new_score = max_score_merger(
                                             s,
-                                            scores.get(&key),
-                                            visited_documents_for_term.contains(&key),
+                                            scores.get(key),
+                                            visited_documents_for_term.contains(key),
                                         );
                                         scores.insert(key.to_owned(), new_score);
                                         visited_documents_for_term.insert(key.to_owned());
@@ -226,9 +226,6 @@ fn expand_term_from_node<'arena, I: Debug>(
         inter.push(cb.char);
         expand_term_from_node(cb, results, &inter); // String.fromCharCode(child.charCode)
         child = unsafe { cb.next.get().read() };
-        if child.is_some() {
-            assert!(cb != child.unwrap());
-        }
     }
 }
 
@@ -238,11 +235,7 @@ mod tests {
     fn approx_equal(a: f64, b: f64, dp: u8) -> bool {
         let p: f64 = 10f64.powf(-(dp as f64));
 
-        if (a - b).abs() < p {
-            return true;
-        } else {
-            return false;
-        }
+        (a - b).abs() < p
     }
 
     use super::*;
@@ -263,7 +256,7 @@ mod tests {
         Some(d.text.as_str())
     }
 
-    fn filter(s: &String) -> String {
+    fn filter(s: &str) -> String {
         s.to_owned()
     }
 
@@ -289,8 +282,7 @@ mod tests {
             for doc in docs {
                 add_document_to_index(
                     &mut index,
-                    &index_arenas.arena_index,
-                    &index_arenas.arena_doc,
+                    &index_arenas,
                     &[title_extract, text_extract],
                     tokenizer,
                     filter,
@@ -304,7 +296,7 @@ mod tests {
                 &mut crate::query::score::default::bm25::new(),
                 tokenizer,
                 filter,
-                &vec![1., 1.],
+                &[1., 1.],
                 None,
             );
             assert_eq!(result.len(), 1);
@@ -335,8 +327,7 @@ mod tests {
             for doc in docs {
                 add_document_to_index(
                     &mut index,
-                    &index_arenas.arena_index,
-                    &index_arenas.arena_doc,
+                    &index_arenas,
                     &[title_extract, text_extract],
                     tokenizer,
                     filter,
@@ -351,7 +342,7 @@ mod tests {
                 &mut crate::query::score::default::bm25::new(),
                 tokenizer,
                 filter,
-                &vec![1., 1.],
+                &[1., 1.],
                 None,
             );
             assert_eq!(result.len(), 2);
@@ -394,8 +385,7 @@ mod tests {
             for doc in docs {
                 add_document_to_index(
                     &mut index,
-                    &index_arenas.arena_index,
-                    &index_arenas.arena_doc,
+                    &index_arenas,
                     &[title_extract, text_extract],
                     tokenizer,
                     filter,
@@ -410,7 +400,7 @@ mod tests {
                 &mut crate::query::score::default::bm25::new(),
                 tokenizer,
                 filter,
-                &vec![1., 1.],
+                &[1., 1.],
                 None,
             );
             assert_eq!(result.len(), 1);
@@ -441,8 +431,7 @@ mod tests {
             for doc in docs {
                 add_document_to_index(
                     &mut index,
-                    &index_arenas.arena_index,
-                    &index_arenas.arena_doc,
+                    &index_arenas,
                     &[title_extract, text_extract],
                     tokenizer,
                     filter,
@@ -451,8 +440,8 @@ mod tests {
                 );
             }
 
-            fn custom_filter(s: &String) -> String {
-                if s.as_str() == "a" {
+            fn custom_filter(s: &str) -> String {
+                if s == "a" {
                     return "".to_string();
                 }
                 filter(s)
@@ -463,7 +452,7 @@ mod tests {
                 &mut crate::query::score::default::bm25::new(),
                 tokenizer,
                 custom_filter,
-                &vec![1., 1.],
+                &[1., 1.],
                 None,
             );
             assert_eq!(result.len(), 0);
@@ -489,8 +478,7 @@ mod tests {
             for doc in docs {
                 add_document_to_index(
                     &mut index,
-                    &index_arenas.arena_index,
-                    &index_arenas.arena_doc,
+                    &index_arenas,
                     &[title_extract, text_extract],
                     tokenizer,
                     filter,
@@ -505,7 +493,7 @@ mod tests {
                 &mut crate::query::score::default::bm25::new(),
                 tokenizer,
                 filter,
-                &vec![1., 1.],
+                &[1., 1.],
                 None,
             );
             assert_eq!(result.len(), 2);
@@ -551,8 +539,7 @@ mod tests {
             for doc in docs {
                 add_document_to_index(
                     &mut index,
-                    &index_arenas.arena_index,
-                    &index_arenas.arena_doc,
+                    &index_arenas,
                     &[title_extract, text_extract],
                     tokenizer,
                     filter,
@@ -590,8 +577,7 @@ mod tests {
             for doc in docs {
                 add_document_to_index(
                     &mut index,
-                    &index_arenas.arena_index,
-                    &index_arenas.arena_doc,
+                    &index_arenas,
                     &[title_extract_s],
                     tokenizer,
                     filter,
@@ -623,8 +609,7 @@ mod tests {
             for doc in docs {
                 add_document_to_index(
                     &mut index,
-                    &index_arenas.arena_index,
-                    &index_arenas.arena_doc,
+                    &index_arenas,
                     &[title_extract, text_extract],
                     tokenizer,
                     filter,

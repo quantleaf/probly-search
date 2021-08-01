@@ -50,8 +50,8 @@ pub fn create_index<'arena, T>(
         root: UnsafeCell::new(None),
         fields,
     };
-    initialize(&index, &index_arenas);
-    return index;
+    initialize(&index, index_arenas);
+    index
 }
 
 pub fn create_index_arenas<'arena, T>() -> IndexArenas<'arena, T> {
@@ -214,9 +214,7 @@ fn find_inverted_index_node_child_nodes_by_char<'arena, T>(
     char: &char,
 ) -> Option<&'arena InvertedIndexNode<'arena, T>> {
     let child = unsafe { from_node.first_child.get().read() };
-    if child.is_none() {
-        return None;
-    }
+    child?;
     let mut iter = child;
     while let Some(node) = iter {
         if &node.char == char {
@@ -224,7 +222,7 @@ fn find_inverted_index_node_child_nodes_by_char<'arena, T>(
         }
         iter = unsafe { node.next.get().read() }
     }
-    return None;
+    None
 }
 
 /**
@@ -277,8 +275,7 @@ Adds a document to the index.
 
 pub fn add_document_to_index<'arena, T: Eq + Hash + Copy, D>(
     index: &mut Index<'arena, T>,
-    arena_index: &'arena Arena<InvertedIndexNode<'arena, T>>,
-    arena_doc: &'arena Arena<DocumentPointer<'arena, T>>,
+    index_arenas: &'arena IndexArenas<'arena, T>,
     field_accessors: &[FieldAccessor<D>],
     tokenizer: Tokenizer,
     filter: Filter,
@@ -300,7 +297,7 @@ pub fn add_document_to_index<'arena, T: Eq + Hash + Copy, D>(
                 let mut field_details = fields.get_mut(i).unwrap();
 
                 // tokenize text
-                let terms = tokenizer(&field_value);
+                let terms = tokenizer(field_value);
 
                 // filter and count terms, ignore empty strings
                 let mut filtered_terms_count = 0;
@@ -335,13 +332,13 @@ pub fn add_document_to_index<'arena, T: Eq + Hash + Copy, D>(
         let mut node = index.root.get_mut().unwrap();
         for (i, char) in term.chars().enumerate() {
             if unsafe { node.first_child.get().read() }.is_none() {
-                node = create_inverted_index_nodes(arena_index, node, &term, &i);
+                node = create_inverted_index_nodes(&index_arenas.arena_index, node, &term, &i);
                 break;
             }
             let next_node = find_inverted_index_node_child_nodes_by_char(node, &char);
             match next_node {
                 None => {
-                    node = create_inverted_index_nodes(arena_index, node, &term, &i);
+                    node = create_inverted_index_nodes(&index_arenas.arena_index, node, &term, &i);
                     break;
                 }
                 Some(n) => {
@@ -349,7 +346,7 @@ pub fn add_document_to_index<'arena, T: Eq + Hash + Copy, D>(
                 }
             }
         }
-        let new_alloc = arena_doc.alloc(DocumentPointer {
+        let new_alloc = index_arenas.arena_doc.alloc(DocumentPointer {
             next: UnsafeCell::new(None),
             details_key: key.to_owned(),
             term_frequency: term_counts[&term].to_owned(),
@@ -500,7 +497,7 @@ fn vacuum_node<'arena, T: Hash + Eq>(
     Count the amount of nodes of the index.
     returns the amount, including root node. Which means count will alway be greater than 0
 */
-pub fn count_nodes<'arena, T>(idx: &Index<'arena, T>) -> i32 {
+pub fn count_nodes<T>(idx: &Index<T>) -> i32 {
     fn count_nodes_recursively<'arena, T>(node: &'arena InvertedIndexNode<'arena, T>) -> i32 {
         let mut count = 1;
         if let Some(first) = unsafe { node.first_child.get().read() } {
@@ -531,7 +528,7 @@ mod tests {
             .collect::<Vec<String>>()
     }
 
-    fn filter(s: &String) -> String {
+    fn filter(s: &str) -> String {
         s.to_owned()
     }
     fn field_accessor(doc: &Doc) -> Option<&str> {
@@ -562,8 +559,7 @@ mod tests {
 
             add_document_to_index(
                 &mut index,
-                &index_arenas.arena_index,
-                &index_arenas.arena_doc,
+                &index_arenas,
                 &field_accessors,
                 tokenizer,
                 filter,
@@ -576,7 +572,7 @@ mod tests {
                 let (_, added_doc) = index.docs.iter().next().unwrap();
                 let e = DocumentDetails {
                     field_length: vec![3],
-                    key: 1 as usize,
+                    key: 1_usize,
                 };
                 assert_eq!(&*added_doc, &e);
                 assert_eq!(index.fields[0], FieldDetails { avg: 3_f64, sum: 3 });
@@ -593,7 +589,7 @@ mod tests {
                 assert_eq!(&first_child_next.char, &(char::from_u32(98).unwrap()));
                 assert_eq!(&first_child.first_child.get().read().is_none(), &true);
                 let first_child_first_doc = first_child.first_doc.get().read().unwrap();
-                assert_eq!(&first_child_first_doc.term_frequency, &vec![1 as usize]);
+                assert_eq!(&first_child_first_doc.term_frequency, &vec![1_usize]);
                 assert_eq!(&first_child_first_doc.details_key, &e.key);
                 assert_eq!(&first_child_first_doc.next.get().read().is_none(), &true);
                 assert_eq!(&first_child_first_doc.next.get().read().is_none(), &true);
@@ -625,8 +621,7 @@ mod tests {
 
             add_document_to_index(
                 &mut index,
-                &index_arenas.arena_index,
-                &index_arenas.arena_doc,
+                &index_arenas,
                 &field_accessors,
                 tokenizer,
                 filter,
@@ -636,8 +631,7 @@ mod tests {
 
             add_document_to_index(
                 &mut index,
-                &index_arenas.arena_index,
-                &index_arenas.arena_doc,
+                &index_arenas,
                 &field_accessors,
                 tokenizer,
                 filter,
@@ -650,14 +644,14 @@ mod tests {
                 index.docs.get(&doc_1.id).unwrap(),
                 &DocumentDetails {
                     field_length: vec![3],
-                    key: 1 as usize,
+                    key: 1_usize,
                 }
             );
             assert_eq!(
                 index.docs.get(&doc_2.id).unwrap(),
                 &DocumentDetails {
                     field_length: vec![3],
-                    key: 2 as usize
+                    key: 2_usize
                 }
             );
             assert_eq!(index.fields[0], FieldDetails { avg: 3_f64, sum: 6 });
@@ -699,13 +693,12 @@ mod tests {
 
             add_document_to_index(
                 &mut index,
-                &index_arenas.arena_index,
-                &index_arenas.arena_doc,
+                &index_arenas,
                 &field_accessors,
                 tokenizer,
                 filter,
                 doc_1.id,
-                doc_1.clone(),
+                doc_1,
             );
         }
     }
@@ -726,8 +719,7 @@ mod tests {
             for doc in docs {
                 add_document_to_index(
                     &mut index,
-                    &index_arenas.arena_index,
-                    &index_arenas.arena_doc,
+                    &index_arenas,
                     &[field_accessor],
                     tokenizer,
                     filter,
@@ -743,7 +735,7 @@ mod tests {
             assert_eq!(index.fields.get(0).unwrap().sum, 0);
             assert_eq!(index.fields.get(0).unwrap().avg.is_nan(), true);
 
-            let mut x = unsafe { index.root.get().read().unwrap() };
+            let x = unsafe { index.root.get().read().unwrap() };
             let y: &InvertedIndexNode<usize> = &InvertedIndexNode {
                 char: char::from_u32(0).unwrap(),
                 first_child: UnsafeCell::new(None),
@@ -771,7 +763,7 @@ mod tests {
             #[test]
             fn it_should_find_undefined_children_if_none() {
                 let index_arenas = create_index_arenas();
-                let mut index = create_index::<usize>(1, &index_arenas);
+                let _index = create_index::<usize>(1, &index_arenas);
                 let node = create(&index_arenas.arena_index, 'x');
                 let c = find_inverted_index_node_child_nodes_by_char(node, &'x');
                 assert_eq!(c.is_none(), true);
@@ -780,7 +772,7 @@ mod tests {
             #[test]
             fn it_should_find_existing() {
                 let index_arenas = create_index_arenas();
-                let index = create_index::<usize>(1, &index_arenas);
+                let _index = create_index::<usize>(1, &index_arenas);
                 let p = create(&index_arenas.arena_index, 'x');
                 let c1 = create(&index_arenas.arena_index, 'y');
                 let c2 = create(&index_arenas.arena_index, 'z');
@@ -808,7 +800,7 @@ mod tests {
             #[test]
             fn it_should_find() {
                 let index_arenas = create_index_arenas();
-                let mut index = create_index::<usize>(1, &index_arenas);
+                let _index = create_index::<usize>(1, &index_arenas);
                 let p = create(&index_arenas.arena_index, 'x');
                 let a = create(&index_arenas.arena_index, 'a');
                 let b = create(&index_arenas.arena_index, 'b');
@@ -817,7 +809,7 @@ mod tests {
                 add_inverted_index_child_node(a, b);
                 add_inverted_index_child_node(b, c);
                 assert_eq!(
-                    std::ptr::eq(find_inverted_index_node(p, &"abc").unwrap(), c),
+                    std::ptr::eq(find_inverted_index_node(p, "abc").unwrap(), c),
                     true
                 );
             }
@@ -844,8 +836,7 @@ mod tests {
 
                 add_document_to_index(
                     &mut index,
-                    &index_arenas.arena_index,
-                    &index_arenas.arena_doc,
+                    &index_arenas,
                     &field_accessors,
                     tokenizer,
                     filter,
@@ -854,8 +845,7 @@ mod tests {
                 );
                 add_document_to_index(
                     &mut index,
-                    &index_arenas.arena_index,
-                    &index_arenas.arena_doc,
+                    &index_arenas,
                     &field_accessors,
                     tokenizer,
                     filter,
@@ -884,8 +874,7 @@ mod tests {
 
                 add_document_to_index(
                     &mut index,
-                    &index_arenas.arena_index,
-                    &index_arenas.arena_doc,
+                    &index_arenas,
                     &field_accessors,
                     tokenizer,
                     filter,
@@ -894,8 +883,7 @@ mod tests {
                 );
                 add_document_to_index(
                     &mut index,
-                    &index_arenas.arena_index,
-                    &index_arenas.arena_doc,
+                    &index_arenas,
                     &field_accessors,
                     tokenizer,
                     filter,
@@ -908,7 +896,7 @@ mod tests {
             #[test]
             fn it_should_count_nodes_empty() {
                 let index_arenas = create_index_arenas();
-                let mut index = create_index::<usize>(1, &index_arenas);
+                let index = create_index::<usize>(1, &index_arenas);
                 assert_eq!(count_nodes(&index), 1); // 1 for root
             }
         }

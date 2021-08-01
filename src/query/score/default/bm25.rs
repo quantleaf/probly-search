@@ -96,11 +96,11 @@ impl<T: Debug> ScoreCalculator<T, BM25TermCalculations> for BM25 {
 #[cfg(test)]
 mod tests {
 
-    use typed_arena::Arena;
+    
 
     use super::*;
     use crate::{
-        index::{create_index_arenas, Index, IndexArenas},
+        index::{create_index_arenas, IndexArenas},
         query::QueryResult,
         test_util::{build_test_index, test_score},
     };

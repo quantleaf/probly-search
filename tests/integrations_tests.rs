@@ -1,3 +1,7 @@
+use std::sync::{Arc, Mutex};
+
+use probly_search::index::{create_index, create_index_arenas, Index, IndexArenas};
+
 /*use std::{
     borrow::BorrowMut,
     collections::HashSet,
@@ -203,20 +207,23 @@ pub fn test_add_query_delete_zero_to_one() {
         }
     );
 }*/
-/*
+
 #[test]
 pub fn it_is_thread_safe() {
-    struct ThreadSafeIndex {
+    struct ThreadSafeIndex<'arena> {
         index: Arc<Mutex<Index<'arena, usize>>>,
     }
 
-    fn new() -> ThreadSafeIndex {
+    fn new<'arena>(index_arenas: &'arena IndexArenas<'arena, usize>) -> ThreadSafeIndex<'arena> {
         ThreadSafeIndex {
-            index: Arc::new(Mutex::new(create_index(2))),
+            index: Arc::new(Mutex::new(create_index(2, &index_arenas))),
         }
     }
     lazy_static::lazy_static! {
-      static ref IDX: ThreadSafeIndex = new();
+        static ref IDXX: IndexArenas<'static,usize> = create_index_arenas();
+    }
+    lazy_static::lazy_static! {
+      static ref IDX: ThreadSafeIndex<'static> = new();
     }
     let doc_1 = Doc {
         id: 0,
@@ -232,4 +239,3 @@ pub fn it_is_thread_safe() {
         doc_1.clone(),
     );
 }
-*/

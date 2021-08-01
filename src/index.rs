@@ -30,7 +30,6 @@ pub struct Index<T> {
     pub arena_index: StandardArena<InvertedIndexNode<T>>,
     pub arena_doc: StandardArena<DocumentPointer<T>>,
 }
-unsafe impl<T> Send for Index<T> {}
 
 impl<T> Index<T> {
     pub fn get_root(&self) -> &InvertedIndexNode<T> {

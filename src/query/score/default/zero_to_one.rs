@@ -153,6 +153,33 @@ mod tests {
             }],
         );
     }
+    #[test]
+    fn it_should_be_bounded_by_one() {
+        let mut x = build_test_index(&["abc abc"]);
+        test_score(
+            &mut x,
+            &mut new(),
+            &"abc ab".to_string(),
+            vec![QueryResult {
+                key: 0_usize,
+                score: 0.83333333333333337_f64,
+            }],
+        );
+    }
+
+    #[test]
+    fn it_should_be_bounded_by_one_2() {
+        let mut x = build_test_index(&["abc ab"]);
+        test_score(
+            &mut x,
+            &mut new(),
+            &"abc abc".to_string(),
+            vec![QueryResult {
+                key: 0_usize,
+                score: 0.5_f64,
+            }],
+        );
+    }
 
     #[test]
     fn it_should_retrieve_multiple_results() {

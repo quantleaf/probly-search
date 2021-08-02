@@ -36,11 +36,14 @@ pub fn max_score_merger(
     score: &f64,
     previous_score: Option<&f64>,
     document_visited_for_term: bool,
+    node_visited_for_term: bool,
 ) -> f64 {
     {
         if let Some(p) = previous_score {
             if document_visited_for_term {
                 f64::max(p.to_owned(), score.to_owned())
+            } else if node_visited_for_term {
+                (p + score) / 2.
             } else {
                 p + score
             }
@@ -76,6 +79,8 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
 ) -> Vec<QueryResult<T>> {
     let query_terms = tokenizer(query);
     let mut scores: HashMap<T, f64> = HashMap::new();
+    let mut visited_indices: HashSet<usize> = HashSet::new();
+
     for query_term_pre_filter in &query_terms {
         let query_term = filter(query_term_pre_filter);
         print!("{}", query_term);
@@ -123,15 +128,17 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                                             s,
                                             scores.get(key),
                                             visited_documents_for_term.contains(key),
+                                            visited_indices.contains(&term_node_index.to_idx()),
                                         );
                                         scores.insert(key.to_owned(), new_score);
-                                        visited_documents_for_term.insert(key.to_owned());
                                     }
                                 }
+                                visited_documents_for_term.insert(key.to_owned());
                                 pointer = pointer_borrowed.next;
                             }
                         }
                     }
+                    visited_indices.insert(term_node_index.to_idx());
                 }
             }
         }

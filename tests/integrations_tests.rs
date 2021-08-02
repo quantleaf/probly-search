@@ -34,7 +34,7 @@ fn filter(s: &str) -> String {
 
 #[test]
 pub fn test_add_query_delete_bm25() {
-    // Creat index with 2 fields
+    // Create index with 2 fields
     let mut index = create_index::<usize>(2);
 
     // Create docs from a custom Doc struct

@@ -1,29 +1,45 @@
-use core::panic;
 use std::{
     collections::{HashMap, HashSet},
+    fmt::{Debug, Formatter},
     hash::Hash,
-    sync::{Arc, Mutex, MutexGuard},
     usize,
 };
 
 use crate::utils::{FieldAccessor, Filter, Tokenizer};
+extern crate typed_generational_arena;
+use typed_generational_arena::StandardArena;
+use typed_generational_arena::StandardIndex as ArenaIndex;
 
-/**s
+/**
 Index data structure.
 
 This data structure is optimized for memory consumption and performant mutations during indexing, so it contains only
 basic information.
  * typeparam `T` Document key.
  */
+#[derive(Debug)]
+
 pub struct Index<T> {
     /// Additional information about documents.
-    pub docs: HashMap<T, Arc<Mutex<DocumentDetails<T>>>>,
+    pub docs: HashMap<T, DocumentDetails<T>>,
     /// Inverted index root node.
-    pub root: Arc<Mutex<InvertedIndexNode<T>>>,
+    pub root: ArenaIndex<InvertedIndexNode<T>>,
     /// Additional information about indexed fields in all documents.
     pub fields: Vec<FieldDetails>,
+
+    pub arena_index: StandardArena<InvertedIndexNode<T>>,
+    pub arena_doc: StandardArena<DocumentPointer<T>>,
 }
 
+impl<T> Index<T> {
+    pub fn get_root(&self) -> &InvertedIndexNode<T> {
+        self.arena_index.get(self.root).unwrap()
+    }
+
+    pub fn get_root_mut(&mut self) -> &mut InvertedIndexNode<T> {
+        self.arena_index.get_mut(self.root).unwrap()
+    }
+}
 /**
 Creates an Index.
  * typeparam `T` Document key.
@@ -31,19 +47,40 @@ Creates an Index.
  * returns `Index`
  */
 pub fn create_index<T>(fields_num: usize) -> Index<T> {
+    create_index_with_capacity(fields_num, 1000, 10000)
+}
+/**
+Creates an Index.
+ * typeparam `T` Document key.
+ * `fieldsNum` Number of fields.
+ * `expected_index_size` Expected node count of index tree.
+ * `expected_documents_count` Expected amount of documents added
+ * returns `Index`
+ */
+pub fn create_index_with_capacity<T>(
+    fields_num: usize,
+    expected_index_size: usize,
+    expected_documents_count: usize,
+) -> Index<T> {
     let fields: Vec<FieldDetails> = vec![FieldDetails { sum: 0, avg: 0_f64 }; fields_num];
+    let mut arena_index = StandardArena::new();
+    arena_index.reserve(expected_index_size);
+    let mut arena_doc = StandardArena::new();
+    arena_doc.reserve(expected_documents_count);
     Index {
         docs: HashMap::new(),
-        root: Arc::new(Mutex::new(create_inverted_index_node(
-            &char::from_u32(0).unwrap(),
-        ))),
+        root: arena_index.insert(create_inverted_index_node(&char::from_u32(0).unwrap())),
         fields,
+        arena_doc,
+        arena_index,
     }
 }
+
 /**
 Document Details object stores additional information about documents.
  * typeparam `T` Document key.
  */
+
 #[derive(Debug, PartialEq)]
 pub struct DocumentDetails<T> {
     /**
@@ -61,15 +98,16 @@ Document pointer contains information about term frequency for a document.
 * typeparam `T` Document key.
 */
 #[derive(Debug)]
+
 pub struct DocumentPointer<T> {
     /**
     Next DocumentPointer in the intrusive linked list.
      */
-    pub next: Option<Arc<Mutex<DocumentPointer<T>>>>,
+    pub next: Option<ArenaIndex<DocumentPointer<T>>>,
     /**
     Reference to a DocumentDetailsobject that is used for this document.
      */
-    pub details: Arc<Mutex<DocumentDetails<T>>>,
+    pub details_key: T,
     /**
     Term frequency in each field.
      */
@@ -81,7 +119,6 @@ Inverted Index Node.
 Inverted index is implemented with a [trie](https://en.wikipedia.org/wiki/Trie) data structure.
  * typeparam `T` Document key.
 */
-#[derive(Debug)]
 pub struct InvertedIndexNode<T> {
     /**
     Char code is used to store keys in the trie data structure.
@@ -90,20 +127,28 @@ pub struct InvertedIndexNode<T> {
     /**
     Next InvertedIndexNode in the intrusive linked list.
      */
-    pub next: Option<Arc<Mutex<InvertedIndexNode<T>>>>,
+    pub next: Option<ArenaIndex<InvertedIndexNode<T>>>,
     /**
     Linked list of children {@link InvertedIndexNode}.
      */
-    pub first_child: Option<Arc<Mutex<InvertedIndexNode<T>>>>,
+    pub first_child: Option<ArenaIndex<InvertedIndexNode<T>>>,
     /**
     Linked list of documents associated with this node.
      */
-    pub first_doc: Option<Arc<Mutex<DocumentPointer<T>>>>,
+    pub first_doc: Option<ArenaIndex<DocumentPointer<T>>>,
 }
 
 impl<T> PartialEq for InvertedIndexNode<T> {
     fn eq(&self, other: &InvertedIndexNode<T>) -> bool {
         other.char == self.char
+    }
+}
+
+impl<T> Debug for InvertedIndexNode<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        f.debug_struct("InvertedIndexNode")
+            .field("char", &self.char)
+            .finish()
     }
 }
 
@@ -145,18 +190,21 @@ Finds inverted index node that matches the `term`.
 returns Inverted index node that contains `term` or an `undefined` value.
  */
 pub fn find_inverted_index_node<T>(
-    node: Arc<Mutex<InvertedIndexNode<T>>>,
+    node: ArenaIndex<InvertedIndexNode<T>>,
     term: &str,
-) -> Option<Arc<Mutex<InvertedIndexNode<T>>>> {
+    index_arena: &StandardArena<InvertedIndexNode<T>>,
+) -> Option<ArenaIndex<InvertedIndexNode<T>>> {
     let mut node_iteration = Some(node);
     for char in term.chars() {
-        if node_iteration.is_none() {
+        if let Some(node) = node_iteration {
+            node_iteration = find_inverted_index_node_child_nodes_by_char(
+                index_arena.get(node).unwrap(),
+                &char,
+                index_arena,
+            );
+        } else {
             break;
         }
-        node_iteration = find_inverted_index_node_child_nodes_by_char(
-            &node_iteration.unwrap().lock().unwrap(),
-            &char,
-        );
     }
     node_iteration
 }
@@ -169,31 +217,21 @@ Finds inverted index child node with matching `char`.
 returns Matching InvertedIndexNode or `undefined`.
  */
 fn find_inverted_index_node_child_nodes_by_char<T>(
-    node_lock: &MutexGuard<InvertedIndexNode<T>>,
+    from_node: &InvertedIndexNode<T>,
     char: &char,
-) -> Option<Arc<Mutex<InvertedIndexNode<T>>>> {
-    let child = &node_lock.first_child;
-    if child.is_none() {
-        return None;
-    }
-    let mut iter = Arc::clone(node_lock.first_child.as_ref().unwrap());
-    loop {
-        let new_iter;
-        if let Ok(l) = &iter.lock() {
-            if &l.char == char {
-                return Some(Arc::clone(&iter));
-            }
-            new_iter = l.next.as_ref().map(|c| Arc::clone(&c));
-        } else {
-            panic!()
+    index_arena: &StandardArena<InvertedIndexNode<T>>,
+) -> Option<ArenaIndex<InvertedIndexNode<T>>> {
+    let child = from_node.first_child;
+    let mut iter = child;
+    while let Some(node_index) = iter {
+        let node = index_arena.get(node_index).unwrap();
+        if &node.char == char {
+            return Some(node_index);
         }
-        match new_iter {
-            Some(n) => {
-                iter = n;
-            }
-            None => return None,
-        }
+
+        iter = node.next;
     }
+    None
 }
 
 /**
@@ -203,16 +241,15 @@ Adds inverted index child node.
  * `child` Child node to add.
  */
 fn add_inverted_index_child_node<T: Clone>(
-    parent: &mut MutexGuard<InvertedIndexNode<T>>,
-    child: Arc<Mutex<InvertedIndexNode<T>>>,
+    parent_index: ArenaIndex<InvertedIndexNode<T>>,
+    child: ArenaIndex<InvertedIndexNode<T>>,
+    index_arena: &mut StandardArena<InvertedIndexNode<T>>,
 ) {
-    //-> Arc<Mutex<InvertedIndexNode<T>>>
-    if let Some(first) = parent.first_child.clone() {
-        child.lock().unwrap().next = Some(first);
+    let parent = index_arena.get_mut(parent_index).unwrap();
+    if let Some(first) = parent.first_child {
+        index_arena.get_mut(child).unwrap().next = Some(first);
     }
-    //let c=  parent.clone();
-    parent.first_child = Some(child);
-    //Arc::clone(&parent.borrow().first_child.unwrap())
+    index_arena.get_mut(parent_index).unwrap().first_child = Some(child);
 }
 
 /**
@@ -228,14 +265,17 @@ typeparam `D` Document type.
  * `doc` Document.
  */
 fn add_inverted_index_doc<T: Clone>(
-    node: Arc<Mutex<InvertedIndexNode<T>>>,
+    node: &mut InvertedIndexNode<T>,
     mut doc: DocumentPointer<T>,
+    arena_doc: &mut StandardArena<DocumentPointer<T>>,
 ) {
-    let mut node_locked = node.lock().unwrap();
-    if let Some(first) = &node_locked.first_doc {
-        doc.next = Some(Arc::clone(first));
+    let node_value = node;
+    if let Some(first) = node_value.first_doc {
+        doc.next = Some(first);
     }
-    node_locked.first_doc = Some(Arc::new(Mutex::new(doc)));
+    let doc_index = arena_doc.insert(doc);
+
+    node_value.first_doc = Some(doc_index);
 }
 
 /**
@@ -268,7 +308,7 @@ pub fn add_document_to_index<T: Eq + Hash + Copy, D>(
                 let mut field_details = fields.get_mut(i).unwrap();
 
                 // tokenize text
-                let terms = tokenizer(&field_value);
+                let terms = tokenizer(field_value);
 
                 // filter and count terms, ignore empty strings
                 let mut filtered_terms_count = 0;
@@ -298,37 +338,37 @@ pub fn add_document_to_index<T: Eq + Hash + Copy, D>(
         }
     }
 
-    docs.insert(
-        key,
-        Arc::new(Mutex::new(DocumentDetails { key, field_length })),
-    );
+    docs.insert(key, DocumentDetails { key, field_length });
     for term in all_terms {
-        let mut node = Arc::clone(&index.root);
-
+        let mut node_index = index.root;
         for (i, char) in term.chars().enumerate() {
-            if node.lock().unwrap().first_child.is_none() {
-                node = create_inverted_index_nodes(node, &term, &i);
+            let node = index.arena_index.get(node_index).unwrap();
+            if node.first_child.is_none() {
+                node_index =
+                    create_inverted_index_nodes(&mut index.arena_index, node_index, &term, &i);
                 break;
             }
             let next_node =
-                find_inverted_index_node_child_nodes_by_char(&node.lock().unwrap(), &char);
+                find_inverted_index_node_child_nodes_by_char(node, &char, &index.arena_index);
             match next_node {
                 None => {
-                    node = create_inverted_index_nodes(node, &term, &i);
+                    node_index =
+                        create_inverted_index_nodes(&mut index.arena_index, node_index, &term, &i);
                     break;
                 }
                 Some(n) => {
-                    node = n;
+                    node_index = n;
                 }
             }
         }
         add_inverted_index_doc(
-            node,
+            index.arena_index.get_mut(node_index).unwrap(),
             DocumentPointer {
                 next: None,
-                details: Arc::clone(&Arc::clone(docs.get(&key).unwrap())),
+                details_key: key.to_owned(),
                 term_frequency: term_counts[&term].to_owned(),
             },
+            &mut index.arena_doc,
         )
     }
 }
@@ -340,31 +380,23 @@ Creates inverted index nodes for the `term` starting from the `start` character.
  * `term` Term.
  * `start` First char code position in the `term`.
  * returns leaf InvertedIndexNode.
-
  */
 fn create_inverted_index_nodes<T: Clone>(
-    mut parent: Arc<Mutex<InvertedIndexNode<T>>>,
+    arena_index: &mut StandardArena<InvertedIndexNode<T>>,
+    mut parent: ArenaIndex<InvertedIndexNode<T>>,
     term: &str,
     start: &usize,
-) -> Arc<Mutex<InvertedIndexNode<T>>> {
+) -> ArenaIndex<InvertedIndexNode<T>> {
     for (i, char) in term.chars().enumerate() {
         if &i < start {
             continue;
         }
-        let new_node: InvertedIndexNode<T> = create_inverted_index_node(&char);
-        let new_parent;
-        if let Ok(mut l) = parent.lock() {
-            add_inverted_index_child_node(&mut l, Arc::new(Mutex::new(new_node)));
-            new_parent = match &l.first_child {
-                None => {
-                    panic!();
-                }
-                Some(x) => Arc::clone(x),
-            };
-        } else {
-            panic!()
-        }
-        parent = new_parent;
+        let new_node = arena_index.insert(create_inverted_index_node(&char));
+        let new_parent = {
+            add_inverted_index_child_node(parent, new_node, arena_index); // unsafe { .get().as_mut().unwrap() }
+            arena_index.get(parent).unwrap().first_child
+        };
+        parent = new_parent.unwrap();
     }
     parent
 }
@@ -388,7 +420,7 @@ pub fn remove_document_from_index<T: Hash + Eq + Copy>(
     let mut remove_key = false;
     if let Some(doc_details) = doc_details_option {
         removed.insert((&key).to_owned());
-        let details = &doc_details.lock().unwrap();
+        let details = doc_details;
         remove_key = true;
         let new_len = (index.docs.len() - 1) as f64;
         for i in 0..fields.len() {
@@ -410,10 +442,57 @@ pub fn remove_document_from_index<T: Hash + Eq + Copy>(
 
 /**
 Cleans up removed documents from the {@link Index}.
+Recursively cleans up removed documents from the index.
+ * `T` Document key.
+ * `index` Index.
+ * `removed` Set of removed document ids.
 */
-pub fn vacuum_index<T: Hash + Eq>(index: &Index<T>, removed: &mut HashSet<T>) {
-    vacuum_node(Arc::clone(&index.root), removed);
+pub fn vacuum_index<T: Hash + Eq>(index: &mut Index<T>, removed: &mut HashSet<T>) {
+    vacuum_node(index, index.root, removed);
     removed.clear();
+}
+
+/**
+Cleans up removed documents from a node, and returns the document frequency
+ * `T` Document key.
+ * `node_index` Index of the node
+ * `index` Index.
+ * `removed` Set of removed document ids.
+*/
+pub fn disconnect_and_count_documents<T: Hash + Eq>(
+    index: &mut Index<T>,
+    node_index: ArenaIndex<InvertedIndexNode<T>>,
+    removed: Option<&HashSet<T>>,
+) -> usize {
+    let node = index.arena_index.get_mut(node_index).unwrap();
+    let mut prev_pointer: Option<ArenaIndex<DocumentPointer<T>>> = None;
+    let mut pointer_option = node.first_doc;
+    let mut document_frequency = 0;
+    while let Some(pointer) = pointer_option {
+        let is_removed = removed.is_some()
+            && removed
+                .unwrap()
+                .contains(&index.arena_doc.get(pointer).unwrap().details_key);
+        if is_removed {
+            match &prev_pointer {
+                None => {
+                    node.first_doc = index.arena_doc.get(pointer).unwrap().next;
+                }
+                Some(prev) => {
+                    index.arena_doc.get_mut(*prev).unwrap().next =
+                        index.arena_doc.get(pointer).unwrap().next;
+                }
+            }
+        } else {
+            document_frequency += 1;
+            prev_pointer = Some(pointer);
+        }
+        pointer_option = index.arena_doc.get(pointer).unwrap().next;
+        if is_removed {
+            index.arena_doc.remove(pointer);
+        }
+    }
+    document_frequency
 }
 
 /**
@@ -423,53 +502,42 @@ Recursively cleans up removed documents from the index.
  * `removed` Set of removed document ids.
 */
 fn vacuum_node<T: Hash + Eq>(
-    node: Arc<Mutex<InvertedIndexNode<T>>>,
-    removed: &mut HashSet<T>,
+    index: &mut Index<T>,
+    node_index: ArenaIndex<InvertedIndexNode<T>>,
+    removed: &HashSet<T>,
 ) -> usize {
-    let mut prev_pointer: Option<Arc<Mutex<DocumentPointer<T>>>> = None;
-    let mut pointer_option = (&node.lock().unwrap().first_doc).clone();
-    while let Some(pointer) = pointer_option {
-        let pb = &pointer.lock().unwrap();
-        if removed.contains(&pb.details.lock().unwrap().key) {
-            match &prev_pointer {
-                None => {
-                    node.lock().unwrap().first_doc = pb.next.clone();
-                }
-                Some(prev) => {
-                    prev.lock().unwrap().next = pb.next.clone();
-                }
-            }
-        } else {
-            prev_pointer = Some((&pointer).clone());
-        }
-        pointer_option = (&pb.next).clone();
-    }
-
-    let mut prev_child: Option<Arc<Mutex<InvertedIndexNode<T>>>> = None;
+    disconnect_and_count_documents(index, node_index, Some(removed));
+    let mut prev_child: Option<ArenaIndex<InvertedIndexNode<T>>> = None;
     let mut ret = 0;
-    if node.lock().unwrap().first_doc.is_some() {
+    let node = index.arena_index.get(node_index).unwrap();
+    if node.first_doc.is_some() {
         ret = 1;
     }
 
-    let mut child_option = (&node.lock().unwrap().first_child).clone();
-    while let Some(child) = child_option {
-        let r = vacuum_node(Arc::clone(&child), removed);
+    let mut child_option = node.first_child;
+    while let Some(child_index) = child_option {
+        let r = vacuum_node(index, child_index, removed);
         ret |= r;
-        let child_unwrapped = child.lock().unwrap();
         if r == 0 {
             // subtree doesn't have any documents, remove this node
-            match &prev_child {
+            match prev_child {
                 Some(prev) => {
-                    prev.lock().unwrap().next = child_unwrapped.next.clone();
+                    index.arena_index.get_mut(prev).unwrap().next =
+                        index.arena_index.get(child_index).unwrap().next;
                 }
                 None => {
-                    node.lock().unwrap().first_child = child_unwrapped.next.clone();
+                    index.arena_index.get_mut(node_index).unwrap().first_child =
+                        index.arena_index.get(child_index).unwrap().next;
                 }
             }
         } else {
-            prev_child = Some(Arc::clone(&child));
+            prev_child = Some(child_index);
         }
-        child_option = (&child_unwrapped.next).clone();
+        child_option = index.arena_index.get(child_index).unwrap().next;
+
+        if r == 0 {
+            index.arena_index.remove(child_index);
+        }
     }
     ret
 }
@@ -479,18 +547,21 @@ fn vacuum_node<T: Hash + Eq>(
     returns the amount, including root node. Which means count will alway be greater than 0
 */
 pub fn count_nodes<T>(idx: &Index<T>) -> i32 {
-    fn count_nodes_recursively<T>(node: &Arc<Mutex<InvertedIndexNode<T>>>) -> i32 {
+    fn count_nodes_recursively<T>(
+        idx: &Index<T>,
+        node_index: ArenaIndex<InvertedIndexNode<T>>,
+    ) -> i32 {
         let mut count = 1;
-        let n = node.lock().unwrap();
-        if let Some(first) = &n.first_child {
-            count += count_nodes_recursively(first);
+        let node = idx.arena_index.get(node_index).unwrap();
+        if let Some(first) = node.first_child {
+            count += count_nodes_recursively(idx, first);
         }
-        if let Some(next) = &n.next {
-            count += count_nodes_recursively(next);
+        if let Some(next) = node.next {
+            count += count_nodes_recursively(idx, next);
         }
         count
     }
-    count_nodes_recursively(&idx.root)
+    count_nodes_recursively(idx, idx.root)
 }
 
 #[cfg(test)]
@@ -510,7 +581,7 @@ mod tests {
             .collect::<Vec<String>>()
     }
 
-    fn filter(s: &String) -> String {
+    fn filter(s: &str) -> String {
         s.to_owned()
     }
     fn field_accessor(doc: &Doc) -> Option<&str> {
@@ -522,7 +593,7 @@ mod tests {
         use super::*;
 
         #[test]
-        fn it_should_add_one_document_with_three_terms() {
+        fn it_should_add_one_document_with_three_terms<'idn>() {
             let field_accessors: Vec<FieldAccessor<Doc>> =
                 vec![field_accessor as fn(doc: &Doc) -> Option<&str>];
 
@@ -531,35 +602,42 @@ mod tests {
                 id: 1,
                 text: "a b c".to_string(),
             };
+
             add_document_to_index(&mut index, &field_accessors, tokenizer, filter, doc.id, doc);
+
             assert_eq!(index.docs.len(), 1);
             let (_, added_doc) = index.docs.iter().next().unwrap();
             let e = DocumentDetails {
                 field_length: vec![3],
-                key: 1 as usize,
+                key: 1_usize,
             };
-            assert_eq!(&*added_doc.lock().unwrap(), &e);
+            assert_eq!(&*added_doc, &e);
             assert_eq!(index.fields[0], FieldDetails { avg: 3_f64, sum: 3 });
-            let root = &index.root.lock().unwrap();
+            let root = index.get_root();
             assert_eq!(&root.char, &char::from_u32(0).unwrap());
             assert_eq!(&root.next.is_none(), &true);
             assert_eq!(&root.first_doc.is_none(), &true);
 
-            let first_child = &root.first_child.as_ref().unwrap().lock().unwrap();
+            let first_child = index.arena_index.get(root.first_child.unwrap()).unwrap();
             assert_eq!(&first_child.char, &(char::from_u32(99).unwrap()));
             assert_eq!(&first_child.first_child.is_none(), &true);
 
-            let first_child_next = &first_child.next.as_ref().unwrap().lock().unwrap();
-            assert_eq!(&first_child_next.char, &(char::from_u32(98).unwrap()));
+            let first_child_next = index.arena_index.get(first_child.next.unwrap()).unwrap();
+            assert_eq!(first_child_next.char, (char::from_u32(98).unwrap()));
             assert_eq!(&first_child.first_child.is_none(), &true);
-            let first_child_first_doc = &first_child.first_doc.as_ref().unwrap().lock().unwrap();
-            assert_eq!(&first_child_first_doc.term_frequency, &vec![1 as usize]);
-            assert_eq!(&*first_child_first_doc.details.lock().unwrap(), &e);
+            let first_child_first_doc =
+                index.arena_doc.get(first_child.first_doc.unwrap()).unwrap();
+            assert_eq!(&first_child_first_doc.term_frequency, &vec![1_usize]);
+            assert_eq!(&first_child_first_doc.details_key, &e.key);
             assert_eq!(&first_child_first_doc.next.is_none(), &true);
             assert_eq!(&first_child_first_doc.next.is_none(), &true);
 
             assert_eq!(
-                &first_child_next.next.as_ref().unwrap().lock().unwrap().char,
+                &index
+                    .arena_index
+                    .get(first_child_next.next.unwrap())
+                    .unwrap()
+                    .char,
                 &(char::from_u32(97).unwrap())
             );
 
@@ -576,6 +654,11 @@ mod tests {
                 id: 1,
                 text: "a b c".to_string(),
             };
+            let doc_2 = Doc {
+                id: 2,
+                text: "b c d".to_string(),
+            };
+
             add_document_to_index(
                 &mut index,
                 &field_accessors,
@@ -585,10 +668,6 @@ mod tests {
                 doc_1.clone(),
             );
 
-            let doc_2 = Doc {
-                id: 2,
-                text: "b c d".to_string(),
-            };
             add_document_to_index(
                 &mut index,
                 &field_accessors,
@@ -597,37 +676,43 @@ mod tests {
                 doc_2.id,
                 doc_2.clone(),
             );
+
             assert_eq!(index.docs.len(), 2);
             assert_eq!(
-                &*index.docs.get(&doc_1.id).as_ref().unwrap().lock().unwrap(),
+                index.docs.get(&doc_1.id).unwrap(),
                 &DocumentDetails {
                     field_length: vec![3],
-                    key: 1 as usize
+                    key: 1_usize,
                 }
             );
             assert_eq!(
-                &*index.docs.get(&doc_2.id).as_ref().unwrap().lock().unwrap(),
+                index.docs.get(&doc_2.id).unwrap(),
                 &DocumentDetails {
                     field_length: vec![3],
-                    key: 2 as usize
+                    key: 2_usize
                 }
             );
             assert_eq!(index.fields[0], FieldDetails { avg: 3_f64, sum: 6 });
-            let root = &index.root.lock().unwrap();
+
+            let root = &index.get_root();
+
             assert_eq!(&root.char, &char::from_u32(0).unwrap());
             assert_eq!(&root.next.is_none(), &true);
             assert_eq!(&root.first_doc.is_none(), &true);
 
-            let first_child = &root.first_child.as_ref().unwrap().lock().unwrap();
+            let first_child = index.arena_index.get(root.first_child.unwrap()).unwrap();
             assert_eq!(&first_child.char, &char::from_u32(100).unwrap());
             assert_eq!(&first_child.first_child.is_none(), &true);
 
-            let first_child_next = &first_child.next.as_ref().unwrap().lock().unwrap();
+            let first_child_next = index.arena_index.get(first_child.next.unwrap()).unwrap();
             assert_eq!(&first_child_next.char, &char::from_u32(99).unwrap());
             assert_eq!(&first_child.first_child.is_none(), &true);
-            let nested_next = first_child_next.next.as_ref().unwrap().lock().unwrap();
+            let nested_next = index
+                .arena_index
+                .get(first_child_next.next.unwrap())
+                .unwrap();
             assert_eq!(&nested_next.char, &char::from_u32(98).unwrap());
-            let nested_nested_next = &nested_next.next.as_ref().unwrap().lock().unwrap();
+            let nested_nested_next = index.arena_index.get(nested_next.next.unwrap()).unwrap();
             assert_eq!(&nested_nested_next.char, &char::from_u32(97).unwrap());
 
             // dont test all the properties
@@ -643,13 +728,14 @@ mod tests {
                 id: 1,
                 text: "a  b".to_string(), // double space could introduce empty tokens
             };
+
             add_document_to_index(
                 &mut index,
                 &field_accessors,
                 tokenizer,
                 filter,
                 doc_1.id,
-                doc_1.clone(),
+                doc_1,
             );
         }
     }
@@ -659,41 +745,59 @@ mod tests {
         use super::*;
         #[test]
         fn it_should_delete_1() {
-            let mut idx = create_index(1);
+            let mut index = create_index::<usize>(1);
+            assert_eq!(index.arena_doc.is_empty(), true);
+
             let mut removed = HashSet::new();
             let docs = vec![Doc {
                 id: 1,
                 text: "a".to_string(),
             }];
+
             for doc in docs {
-                add_document_to_index(&mut idx, &[field_accessor], tokenizer, filter, doc.id, doc)
+                add_document_to_index(
+                    &mut index,
+                    &[field_accessor],
+                    tokenizer,
+                    filter,
+                    doc.id,
+                    doc,
+                )
             }
-            remove_document_from_index(&mut idx, &mut removed, 1);
-            vacuum_index(&mut idx, &mut removed);
 
-            assert_eq!(idx.docs.len(), 0);
-            assert_eq!(idx.fields.len(), 1);
-            assert_eq!(idx.fields.get(0).unwrap().sum, 0);
-            assert_eq!(idx.fields.get(0).unwrap().avg.is_nan(), true);
+            remove_document_from_index(&mut index, &mut removed, 1);
+            vacuum_index(&mut index, &mut removed);
 
-            assert_eq!(
-                *idx.root.lock().unwrap(),
-                InvertedIndexNode {
-                    char: char::from_u32(0).unwrap(),
-                    first_child: None,
-                    first_doc: None,
-                    next: None
-                }
-            );
+            assert_eq!(index.docs.len(), 0);
+            assert_eq!(index.fields.len(), 1);
+            assert_eq!(index.fields.get(0).unwrap().sum, 0);
+            assert_eq!(index.fields.get(0).unwrap().avg.is_nan(), true);
+
+            let x = index.get_root();
+            let y: &InvertedIndexNode<usize> = &InvertedIndexNode {
+                char: char::from_u32(0).unwrap(),
+                first_child: None,
+                first_doc: None,
+                next: None,
+            };
+            assert_eq!(x, y);
+
+            // Delete root from index and assert is empty
+            index.arena_index.remove(index.root);
+            assert_eq!(index.arena_doc.is_empty(), true);
+            assert_eq!(index.arena_index.is_empty(), true);
         }
     }
     mod find {
 
         use super::*;
 
-        fn create(char: char) -> Arc<Mutex<InvertedIndexNode<String>>> {
-            let node: InvertedIndexNode<String> = create_inverted_index_node(&char);
-            Arc::new(Mutex::new(node))
+        fn create(
+            arena_index: &mut StandardArena<InvertedIndexNode<usize>>,
+            char: char,
+        ) -> ArenaIndex<InvertedIndexNode<usize>> {
+            let node: InvertedIndexNode<usize> = create_inverted_index_node(&char);
+            arena_index.insert(node)
         }
 
         mod char_code {
@@ -701,36 +805,42 @@ mod tests {
 
             #[test]
             fn it_should_find_undefined_children_if_none() {
-                let node = create('x');
-                let c = find_inverted_index_node_child_nodes_by_char(&node.lock().unwrap(), &'x');
+                let mut index = create_index::<usize>(1);
+                let node = create(&mut index.arena_index, 'x');
+                let c = find_inverted_index_node_child_nodes_by_char(
+                    index.arena_index.get(node).unwrap(),
+                    &'x',
+                    &index.arena_index,
+                );
                 assert_eq!(c.is_none(), true);
             }
 
             #[test]
             fn it_should_find_existing() {
-                let p = create('x');
-                let c1 = create('y');
-                let c2 = create('z');
-                add_inverted_index_child_node(&mut p.lock().unwrap(), Arc::clone(&c1));
-                add_inverted_index_child_node(&mut p.lock().unwrap(), Arc::clone(&c2));
+                let mut index = create_index::<usize>(1);
+                let p = create(&mut index.arena_index, 'x');
+                let c1 = create(&mut index.arena_index, 'y');
+                let c2 = create(&mut index.arena_index, 'z');
+                add_inverted_index_child_node(p, c1, &mut index.arena_index);
+                add_inverted_index_child_node(p, c2, &mut index.arena_index);
                 assert_eq!(
-                    std::ptr::eq(
-                        find_inverted_index_node_child_nodes_by_char(&p.lock().unwrap(), &'y')
-                            .unwrap()
-                            .as_ref(),
-                        c1.as_ref()
-                    ),
-                    true
+                    find_inverted_index_node_child_nodes_by_char(
+                        index.arena_index.get(p).unwrap(),
+                        &'y',
+                        &index.arena_index
+                    )
+                    .unwrap(),
+                    c1
                 );
                 assert_eq!(
-                    std::ptr::eq(
-                        find_inverted_index_node_child_nodes_by_char(&p.lock().unwrap(), &'z')
-                            .unwrap()
-                            .as_ref(),
-                        c2.as_ref()
-                    ),
-                    true
-                );
+                    find_inverted_index_node_child_nodes_by_char(
+                        index.arena_index.get(p).unwrap(),
+                        &'z',
+                        &index.arena_index
+                    )
+                    .unwrap(),
+                    c2
+                )
             }
         }
 
@@ -738,19 +848,17 @@ mod tests {
             use super::*;
             #[test]
             fn it_should_find() {
-                let p = create('x');
-                let a = create('a');
-                let b = create('b');
-                let c = create('c');
-                add_inverted_index_child_node(&mut p.lock().unwrap(), Arc::clone(&a));
-                add_inverted_index_child_node(&mut a.lock().unwrap(), Arc::clone(&b));
-                add_inverted_index_child_node(&mut b.lock().unwrap(), Arc::clone(&c));
+                let mut index = create_index::<usize>(1);
+                let p = create(&mut index.arena_index, 'x');
+                let a = create(&mut index.arena_index, 'a');
+                let b = create(&mut index.arena_index, 'b');
+                let c = create(&mut index.arena_index, 'c');
+                add_inverted_index_child_node(p, a, &mut index.arena_index);
+                add_inverted_index_child_node(a, b, &mut index.arena_index);
+                add_inverted_index_child_node(b, c, &mut index.arena_index);
                 assert_eq!(
-                    std::ptr::eq(
-                        find_inverted_index_node(p, &"abc").unwrap().as_ref(),
-                        c.as_ref()
-                    ),
-                    true
+                    find_inverted_index_node(p, "abc", &index.arena_index).unwrap(),
+                    c
                 );
             }
         }
@@ -772,6 +880,7 @@ mod tests {
                     id: 1,
                     text: "abe".to_string(),
                 };
+
                 add_document_to_index(&mut index, &field_accessors, tokenizer, filter, doc.id, doc);
                 add_document_to_index(
                     &mut index,
@@ -781,7 +890,6 @@ mod tests {
                     doc_2.id,
                     doc_2,
                 );
-
                 assert_eq!(count_nodes(&index), 5); //
             }
 
@@ -791,6 +899,7 @@ mod tests {
                     vec![field_accessor as fn(doc: &Doc) -> Option<&str>];
 
                 let mut index = create_index::<usize>(1);
+
                 let doc = Doc {
                     id: 1,
                     text: "ab cd".to_string(),
@@ -799,6 +908,7 @@ mod tests {
                     id: 1,
                     text: "ab ef".to_string(),
                 };
+
                 add_document_to_index(&mut index, &field_accessors, tokenizer, filter, doc.id, doc);
                 add_document_to_index(
                     &mut index,
@@ -808,7 +918,6 @@ mod tests {
                     doc_2.id,
                     doc_2,
                 );
-
                 assert_eq!(count_nodes(&index), 7); //
             }
 

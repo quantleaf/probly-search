@@ -13,6 +13,9 @@ keywords = ["search", "query", "bm25","index"]
 categories = ["text-processing"]
 exclude = [".github/**", ".gitignore", ".rustfmt.toml"]
 
+[dependencies]
+typed-generational-arena = "0.2"
+
 [dev-dependencies]
 lazy_static = "1.4.0"
 rand = "0.8.3"
@@ -23,3 +26,8 @@ criterion = {version ="0.3" , features  = ["html_reports"]}
 [[bench]]
 name = "test_benchmark"
 harness = false
+
+
+[profile.dev]
+opt-level = 0
+debug = true

@@ -2,11 +2,7 @@ use crate::{
     index::{DocumentDetails, DocumentPointer, FieldDetails},
     query::QueryResult,
 };
-use std::{
-    collections::HashMap,
-    fmt::Debug,
-    sync::{Arc, Mutex, MutexGuard},
-};
+use std::{collections::HashMap, fmt::Debug};
 
 pub struct TermData<'a> {
     // The current query term
@@ -46,7 +42,7 @@ pub trait ScoreCalculator<T: Debug, M> {
         &mut self,
         term_expansion: &TermData,
         document_frequency: usize,
-        documents: &HashMap<T, Arc<Mutex<DocumentDetails<T>>>>,
+        documents: &HashMap<T, DocumentDetails<T>>,
     ) -> Option<M> {
         None
     }
@@ -60,8 +56,8 @@ pub trait ScoreCalculator<T: Debug, M> {
     fn score(
         &mut self,
         before_output: Option<&M>,
-        document_pointer: &MutexGuard<DocumentPointer<T>>,
-        document_details: &MutexGuard<DocumentDetails<T>>,
+        document_pointer: &DocumentPointer<T>,
+        document_details: &DocumentDetails<T>,
         field_data: &FieldData,
         term_expansion: &TermData,
     ) -> Option<f64>;

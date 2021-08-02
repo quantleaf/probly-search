@@ -2,11 +2,7 @@
     https://en.wikipedia.org/wiki/Okapi_BM25
 */
 
-use std::{
-    collections::HashMap,
-    fmt::Debug,
-    sync::{Arc, Mutex, MutexGuard},
-};
+use std::{collections::HashMap, fmt::Debug};
 
 use crate::{
     index::{DocumentDetails, DocumentPointer},
@@ -38,7 +34,7 @@ impl<T: Debug> ScoreCalculator<T, BM25TermCalculations> for BM25 {
         &mut self,
         term_expansion: &TermData,
         document_frequency: usize,
-        documents: &HashMap<T, Arc<Mutex<DocumentDetails<T>>>>,
+        documents: &HashMap<T, DocumentDetails<T>>,
     ) -> Option<BM25TermCalculations> {
         Some(BM25TermCalculations {
             expansion_boost: {
@@ -64,8 +60,8 @@ impl<T: Debug> ScoreCalculator<T, BM25TermCalculations> for BM25 {
     fn score(
         &mut self,
         before_output: Option<&BM25TermCalculations>,
-        document_pointer: &MutexGuard<DocumentPointer<T>>,
-        document_details: &MutexGuard<DocumentDetails<T>>,
+        document_pointer: &DocumentPointer<T>,
+        document_details: &DocumentDetails<T>,
         field_data: &FieldData,
         _: &TermData,
     ) -> Option<f64> {
@@ -102,15 +98,14 @@ mod tests {
 
     use super::*;
     use crate::{
-        index::Index,
         query::QueryResult,
         test_util::{build_test_index, test_score},
     };
     #[test]
     fn it_should_return_doc_1() {
-        let mut idx: Index<usize> = build_test_index(&["a b c", "c d e"]);
+        let mut x = build_test_index(&["a b c", "c d e"]);
         test_score(
-            &mut idx,
+            &mut x,
             &mut new(),
             &"a".to_string(),
             vec![QueryResult {
@@ -122,9 +117,9 @@ mod tests {
 
     #[test]
     fn it_should_return_doc_1_and_2() {
-        let mut idx: Index<usize> = build_test_index(&["a b c", "c d e"]);
+        let mut x = build_test_index(&["a b c", "c d e"]);
         test_score(
-            &mut idx,
+            &mut x,
             &mut new(),
             &"c".to_string(),
             vec![

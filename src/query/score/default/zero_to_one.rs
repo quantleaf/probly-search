@@ -11,7 +11,6 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
     hash::Hash,
-    sync::MutexGuard,
 };
 
 use crate::{
@@ -37,8 +36,8 @@ impl<T: Debug + Eq + Hash + Clone> ScoreCalculator<T, ZeroToOneBeforeCalculation
     fn score(
         &mut self,
         _: Option<&ZeroToOneBeforeCalculations>,
-        document_pointer: &MutexGuard<DocumentPointer<T>>,
-        document_details: &MutexGuard<DocumentDetails<T>>,
+        document_pointer: &DocumentPointer<T>,
+        document_details: &DocumentDetails<T>,
         field_data: &FieldData,
         term_data: &TermData,
     ) -> Option<f64> {
@@ -48,7 +47,7 @@ impl<T: Debug + Eq + Hash + Clone> ScoreCalculator<T, ZeroToOneBeforeCalculation
         */
         let key = &document_details.key;
         let mut has_key = false;
-        let contains_term_on_key = match self.visited_terms_by_document.get(&key) {
+        let contains_term_on_key = match self.visited_terms_by_document.get(key) {
             Some(terms) => {
                 has_key = true;
                 terms.contains(term_data.query_term)
@@ -62,7 +61,7 @@ impl<T: Debug + Eq + Hash + Clone> ScoreCalculator<T, ZeroToOneBeforeCalculation
 
         // Add term to visited
         self.visited_terms_by_document
-            .get_mut(&key)
+            .get_mut(key)
             .unwrap()
             .insert(term_data.query_term.to_owned());
 
@@ -105,16 +104,13 @@ impl<T: Debug + Eq + Hash + Clone> ScoreCalculator<T, ZeroToOneBeforeCalculation
 mod tests {
 
     use super::*;
-    use crate::{
-        index::Index,
-        test_util::{build_test_index, test_score},
-    };
+    use crate::test_util::{build_test_index, test_score};
 
     #[test]
     fn it_should_perform_partial_matching() {
-        let mut idx: Index<usize> = build_test_index(&["abc", "abcefg"]);
+        let mut x = build_test_index(&["abc", "abcefg"]);
         test_score(
-            &mut idx,
+            &mut x,
             &mut new(),
             &"abc".to_string(),
             vec![
@@ -132,13 +128,13 @@ mod tests {
 
     #[test]
     fn it_should_penalize_repeating_query_terms() {
-        let mut idx = build_test_index(&["abc"]);
+        let mut x = build_test_index(&["abc"]);
         test_score(
-            &mut idx,
+            &mut x,
             &mut new(),
             &"abc abc".to_string(),
             vec![QueryResult {
-                key: 0 as usize,
+                key: 0_usize,
                 score: 0.5_f64,
             }],
         );
@@ -146,13 +142,13 @@ mod tests {
 
     #[test]
     fn it_should_not_penalize_repeating_document_terms() {
-        let mut idx = build_test_index(&["abc abc"]);
+        let mut x = build_test_index(&["abc abc"]);
         test_score(
-            &mut idx,
+            &mut x,
             &mut new(),
             &"abc".to_string(),
             vec![QueryResult {
-                key: 0 as usize,
+                key: 0_usize,
                 score: 1_f64,
             }],
         );
@@ -160,7 +156,7 @@ mod tests {
 
     #[test]
     fn it_should_retrieve_multiple_results() {
-        let mut idx = build_test_index(&[
+        let mut x = build_test_index(&[
             "abcdef",
             "abc abcdef",
             "abcdef abcdef",
@@ -169,28 +165,28 @@ mod tests {
         ]);
 
         test_score(
-            &mut idx,
+            &mut x,
             &mut new(),
             &"abc".to_string(),
             vec![
                 QueryResult {
-                    key: 0 as usize,
+                    key: 0_usize,
                     score: 0.5_f64,
                 },
                 QueryResult {
-                    key: 1 as usize,
+                    key: 1_usize,
                     score: 0.5_f64,
                 },
                 QueryResult {
-                    key: 2 as usize,
+                    key: 2_usize,
                     score: 0.5_f64,
                 },
                 QueryResult {
-                    key: 3 as usize,
+                    key: 3_usize,
                     score: 0.25_f64,
                 },
                 QueryResult {
-                    key: 4 as usize,
+                    key: 4_usize,
                     score: 0.25_f64,
                 },
             ],
@@ -199,7 +195,7 @@ mod tests {
 
     #[test]
     fn it_should_retrieve_multiple_results_and_penalize_repeating_query_terms() {
-        let mut idx = build_test_index(&[
+        let mut x = build_test_index(&[
             "abcdef",
             "abc abcdef",
             "abcdef abcdef",
@@ -208,28 +204,28 @@ mod tests {
         ]);
 
         test_score(
-            &mut idx,
+            &mut x,
             &mut new(),
             &"abc abc".to_string(),
             vec![
                 QueryResult {
-                    key: 1 as usize,
+                    key: 1_usize,
                     score: 0.5_f64,
                 },
                 QueryResult {
-                    key: 2 as usize,
+                    key: 2_usize,
                     score: 0.5_f64,
                 },
                 QueryResult {
-                    key: 0 as usize,
+                    key: 0_usize,
                     score: 0.25_f64,
                 },
                 QueryResult {
-                    key: 3 as usize,
+                    key: 3_usize,
                     score: 0.25_f64,
                 },
                 QueryResult {
-                    key: 4 as usize,
+                    key: 4_usize,
                     score: 0.25_f64,
                 },
             ],

@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use probly_search::index::{add_document_to_index, create_index, Index};
+use probly_search::index::{add_document_to_index, create_index_with_capacity, Index};
 
 criterion_group!(benches, test_speed);
 criterion_main!(benches);
@@ -8,7 +8,7 @@ struct DocX {
     title: String,
 }
 
-fn filter(s: &String) -> String {
+fn filter(s: &str) -> String {
     s.to_owned()
 }
 fn tokenizer(s: &str) -> Vec<String> {
@@ -39,30 +39,29 @@ pub fn test_speed(c: &mut Criterion) {
     }
 
     c.bench_function("add_100k_docs", |b| {
-        let mut idx: Index<usize> = create_index(1);
+        let mut index = create_index_with_capacity(1, 100000, 100000);
         let mut random_strings: Vec<String> = Vec::new();
         for _ in 1..100000 {
             let mut new_rand = generate_string(0, 4);
-            new_rand.push_str(" ");
+            new_rand.push(' ');
             new_rand.push_str(&generate_string(0, 4));
             random_strings.push(new_rand);
         }
-        // whatever you want to do
         let extractor = [title_extract_x as fn(&_) -> Option<&str>];
-        b.iter(|| add_all_documents(&mut idx, &extractor, &&random_strings));
+        b.iter(|| add_all_documents(&mut index, &extractor, &random_strings));
     });
 }
 
 fn add_all_documents(
-    mut idx: &mut Index<usize>,
+    mut index: &mut Index<usize>,
     extractor: &[fn(&DocX) -> Option<&str>],
-    random_strings: &Vec<String>,
+    random_strings: &[String],
 ) {
     for (i, s) in random_strings.iter().enumerate() {
         let d = DocX {
             id: i,
             title: s.to_owned(),
         };
-        add_document_to_index(&mut idx, &extractor, tokenizer, filter, d.id, d);
+        add_document_to_index(&mut index, extractor, tokenizer, filter, d.id, d);
     }
 }

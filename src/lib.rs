@@ -12,11 +12,7 @@ pub mod test_util {
     fn approx_equal(a: f64, b: f64, dp: u8) -> bool {
         let p: f64 = 10f64.powf(-(dp as f64));
 
-        if (a - b).abs() < p {
-            return true;
-        } else {
-            return false;
-        }
+        (a - b).abs() < p
     }
 
     struct Doc {
@@ -32,29 +28,30 @@ pub mod test_util {
         Some(d.title.as_str())
     }
 
-    fn filter(s: &String) -> String {
+    fn filter(s: &str) -> String {
         s.to_owned()
     }
 
-    pub fn test_score<M, S: ScoreCalculator<usize, M>>(
+    pub fn test_score<'arena, M, S: ScoreCalculator<usize, M>>(
         mut idx: &mut Index<usize>,
         score_calculator: &mut S,
         q: &str,
         expected: Vec<QueryResult<usize>>,
     ) {
+        let fields_len = idx.fields.len();
         let mut results = query(
             &mut idx,
             q,
             score_calculator,
             tokenizer,
             filter,
-            &vec![1., 1.],
+            &vec![1.; fields_len],
             None,
         );
         results.sort_by(|a, b| {
             let mut sort = b.score.partial_cmp(&a.score).unwrap();
             sort = sort.then_with(|| a.key.partial_cmp(&b.key).unwrap());
-            return sort;
+            sort
         });
 
         for (index, result) in results.iter().enumerate() {
@@ -66,16 +63,16 @@ pub mod test_util {
     /***
         Create a index with docucments with title fields, with increasing ids starting from 0
     */
-    pub fn build_test_index(titles: &[&str]) -> Index<usize> {
-        let mut idx: Index<usize> = create_index(1);
 
-        for (index, title) in titles.iter().enumerate() {
+    pub fn build_test_index<'arena>(titles: &[&str]) -> Index<usize> {
+        let mut index: Index<usize> = create_index(1);
+        for (i, title) in titles.iter().enumerate() {
             let doc = Doc {
-                id: index,
+                id: i,
                 title: title.to_string(),
             };
-            add_document_to_index(&mut idx, &[title_extract], tokenizer, filter, doc.id, doc);
+            add_document_to_index(&mut index, &[title_extract], tokenizer, filter, doc.id, doc);
         }
-        idx
+        index
     }
 }

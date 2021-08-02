@@ -15,7 +15,6 @@ use std::{
 
 use self::score::calculator::{FieldData, TermData};
 extern crate typed_generational_arena;
-use typed_generational_arena::StandardIndex as ArenaIndex;
 /**
  * Query Result.
 

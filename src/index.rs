@@ -380,7 +380,6 @@ Creates inverted index nodes for the `term` starting from the `start` character.
  * `term` Term.
  * `start` First char code position in the `term`.
  * returns leaf InvertedIndexNode.
-
  */
 fn create_inverted_index_nodes<T: Clone>(
     arena_index: &mut StandardArena<InvertedIndexNode<T>>,
@@ -443,6 +442,10 @@ pub fn remove_document_from_index<T: Hash + Eq + Copy>(
 
 /**
 Cleans up removed documents from the {@link Index}.
+Recursively cleans up removed documents from the index.
+ * `T` Document key.
+ * `index` Index.
+ * `removed` Set of removed document ids.
 */
 pub fn vacuum_index<T: Hash + Eq>(index: &mut Index<T>, removed: &mut HashSet<T>) {
     vacuum_node(index, index.root, removed);
@@ -450,21 +453,26 @@ pub fn vacuum_index<T: Hash + Eq>(index: &mut Index<T>, removed: &mut HashSet<T>
 }
 
 /**
-Recursively cleans up removed documents from the index.
+Cleans up removed documents from a node, and returns the document frequency
  * `T` Document key.
+ * `node_index` Index of the node
  * `index` Index.
  * `removed` Set of removed document ids.
 */
-fn vacuum_node<T: Hash + Eq>(
+pub fn disconnect_and_count_documents<T: Hash + Eq>(
     index: &mut Index<T>,
     node_index: ArenaIndex<InvertedIndexNode<T>>,
-    removed: &mut HashSet<T>,
+    removed: Option<&HashSet<T>>,
 ) -> usize {
-    let mut prev_pointer: Option<ArenaIndex<DocumentPointer<T>>> = None;
     let node = index.arena_index.get_mut(node_index).unwrap();
+    let mut prev_pointer: Option<ArenaIndex<DocumentPointer<T>>> = None;
     let mut pointer_option = node.first_doc;
+    let mut document_frequency = 0;
     while let Some(pointer) = pointer_option {
-        let is_removed = removed.contains(&index.arena_doc.get(pointer).unwrap().details_key);
+        let is_removed = removed.is_some()
+            && removed
+                .unwrap()
+                .contains(&index.arena_doc.get(pointer).unwrap().details_key);
         if is_removed {
             match &prev_pointer {
                 None => {
@@ -476,6 +484,7 @@ fn vacuum_node<T: Hash + Eq>(
                 }
             }
         } else {
+            document_frequency += 1;
             prev_pointer = Some(pointer);
         }
         pointer_option = index.arena_doc.get(pointer).unwrap().next;
@@ -483,9 +492,24 @@ fn vacuum_node<T: Hash + Eq>(
             index.arena_doc.remove(pointer);
         }
     }
+    document_frequency
+}
 
+/**
+Recursively cleans up removed documents from the index.
+ * `T` Document key.
+ * `index` Index.
+ * `removed` Set of removed document ids.
+*/
+fn vacuum_node<T: Hash + Eq>(
+    index: &mut Index<T>,
+    node_index: ArenaIndex<InvertedIndexNode<T>>,
+    removed: &HashSet<T>,
+) -> usize {
+    disconnect_and_count_documents(index, node_index, Some(removed));
     let mut prev_child: Option<ArenaIndex<InvertedIndexNode<T>>> = None;
     let mut ret = 0;
+    let node = index.arena_index.get(node_index).unwrap();
     if node.first_doc.is_some() {
         ret = 1;
     }

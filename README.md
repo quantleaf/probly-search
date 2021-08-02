@@ -24,8 +24,7 @@ https://quantleaf.github.io/probly-search-demo/
 - Per-field score boosting.
 - Configurable tokenizer and term filter.
 - Free text queries with query expansion.
-- Fast allocation, insertion.
-- (Con) Document deletion, but you need to rebuild the index to clear up all the used memory.
+- Fast allocation, but latent deletion.
 
 
 ## Documentation 

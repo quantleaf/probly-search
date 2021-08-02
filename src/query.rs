@@ -67,7 +67,7 @@ Arguments
 returns Array of QueryResult structs
 */
 pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
-    index: &mut Index<T>,
+    mut index: &mut Index<T>,
     query: &str,
     score_calculator: &mut S,
     tokenizer: Tokenizer,
@@ -75,8 +75,6 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
     fields_boost: &[f64],
     removed: Option<&HashSet<T>>,
 ) -> Vec<QueryResult<T>> {
-    let docs = &index.docs;
-    let fields = &index.fields;
     let query_terms = tokenizer(query);
     let mut scores: HashMap<T, f64> = HashMap::new();
     for query_term_pre_filter in &query_terms {
@@ -89,33 +87,9 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                 let term_node_option =
                     find_inverted_index_node(index.root, &query_term_expanded, &index.arena_index);
                 if let Some(term_node_index) = term_node_option {
-                    let term_node = index.arena_index.get_mut(term_node_index).unwrap();
-                    let mut document_frequency = 0;
-                    if let Some(term_node_option_first_doc) = term_node.first_doc {
-                        let mut prev_pointer: Option<ArenaIndex<DocumentPointer<T>>> = None;
-                        let mut pointer_option = Some(term_node_option_first_doc);
-                        while let Some(pointer) = pointer_option {
-                            let pointer_value = index.arena_doc.get(pointer).unwrap();
-                            let is_removed = removed.is_some()
-                                && removed.unwrap().contains(&pointer_value.details_key);
-                            if is_removed {
-                                // Cleanup old removed documents while searching. If vaccume after delete, this will have not effect
-                                if let Some(pp) = prev_pointer {
-                                    index.arena_doc.get_mut(pp).unwrap().next = pointer_value.next;
-                                } else {
-                                    term_node.first_doc = pointer_value.next;
-                                }
-                            } else {
-                                prev_pointer = Some(pointer);
-                                document_frequency += 1;
-                            }
-                            pointer_option = index.arena_doc.get(pointer).unwrap().next;
-                            if is_removed {
-                                index.arena_doc.remove(pointer);
-                            }
-                        }
-                    }
-
+                    let document_frequency =
+                        disconnect_and_count_documents(&mut index, term_node_index, removed);
+                    let term_node = index.arena_index.get(term_node_index).unwrap();
                     if let Some(term_node_option_first_doc) = term_node.first_doc {
                         if document_frequency > 0 {
                             let term_expansion_data = TermData {
@@ -126,7 +100,7 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                             let pre_calculations = &score_calculator.before_each(
                                 &term_expansion_data,
                                 document_frequency,
-                                docs,
+                                &index.docs,
                             );
 
                             let mut pointer = Some(term_node_option_first_doc);
@@ -134,6 +108,7 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                                 let pointer_borrowed = index.arena_doc.get(p).unwrap();
                                 let key = &pointer_borrowed.details_key;
                                 if removed.is_none() || !removed.unwrap().contains(key) {
+                                    let fields = &index.fields;
                                     let score = &score_calculator.score(
                                         pre_calculations.as_ref(),
                                         pointer_borrowed,

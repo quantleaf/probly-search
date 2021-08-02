@@ -4,7 +4,7 @@ use std::{
 };
 
 use probly_search::{
-    index::{add_document_to_index, create_index, remove_document_from_index, Index},
+    index::{add_document_to_index, create_index, remove_document_from_index, vacuum_index, Index},
     query::{
         query,
         score::default::{bm25, zero_to_one},
@@ -37,8 +37,10 @@ fn filter(s: &str) -> String {
 
 #[test]
 pub fn test_add_query_delete_bm25() {
+    // Create docs from a custom Doc struct
     let mut index = create_index::<usize>(2);
 
+    // Create docs from a custom Doc struct
     let doc_1 = Doc {
         id: 0,
         title: "abc".to_string(),
@@ -51,6 +53,7 @@ pub fn test_add_query_delete_bm25() {
         description: "abcd".to_string(),
     };
 
+    // Add documents to index
     add_document_to_index(
         &mut index,
         &[title_extract, description_extract],
@@ -95,8 +98,12 @@ pub fn test_add_query_delete_bm25() {
         }
     );
 
+    // Remove documents from index
     let mut removed_docs = HashSet::new();
     remove_document_from_index(&mut index, &mut removed_docs, doc_1.id);
+
+    // Vacuum to remove completely
+    vacuum_index(&mut index, &mut removed_docs);
 
     // Search, expect 1 result
     result = query(

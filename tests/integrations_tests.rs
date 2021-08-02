@@ -1,7 +1,4 @@
-use std::{
-    collections::HashSet,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashSet, sync::Mutex};
 
 use probly_search::{
     index::{add_document_to_index, create_index, remove_document_from_index, vacuum_index, Index},
@@ -204,17 +201,8 @@ pub fn test_add_query_delete_zero_to_one() {
 
 #[test]
 pub fn it_is_thread_safe() {
-    struct ThreadSafeIndex {
-        index: Arc<Mutex<Index<usize>>>,
-    }
-
-    fn new() -> ThreadSafeIndex {
-        ThreadSafeIndex {
-            index: Arc::new(Mutex::new(create_index(2))),
-        }
-    }
     lazy_static::lazy_static! {
-        static ref IDX: ThreadSafeIndex = new();
+        static ref IDX: Mutex<Index<usize>> = Mutex::new(create_index(2));
     }
     let doc_1 = Doc {
         id: 0,
@@ -222,7 +210,7 @@ pub fn it_is_thread_safe() {
         description: "dfg".to_string(),
     };
     add_document_to_index(
-        &mut *IDX.index.lock().unwrap(),
+        &mut *IDX.lock().unwrap(),
         &[title_extract, description_extract],
         tokenizer,
         filter,

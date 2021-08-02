@@ -44,16 +44,10 @@ use probly_search::{
 };
 
 
-// Create index with two fields
-let mut idx: Index<usize> = create_index(2);
+// Create index with 2 fields
+let mut index = create_index::<usize>(2);
 
 // Create docs from a custom Doc struct
-struct Doc {
-    id: usize,
-    title: String,
-    description: String,
-}
-
 let doc_1 = Doc {
     id: 0,
     title: "abc".to_string(),
@@ -66,26 +60,9 @@ let doc_2 = Doc {
     description: "abcd".to_string(),
 };
 
-// Add documents to index 
-fn tokenizer(s: &str) -> Vec<String> {
-    s.split(' ')
-        .map(|slice| slice.to_owned())
-        .collect::<Vec<String>>()
-}
-fn title_extract(d: &Doc) -> Option<&str> {
-    Some(d.title.as_str())
-}
-
-fn description_extract(d: &Doc) -> Option<&str> {
-    Some(d.description.as_str())
-}
-
-fn filter(s: &String) -> String {
-    s.to_owned()
-}
-
+// Add documents to index
 add_document_to_index(
-    &mut idx,
+    &mut index,
     &[title_extract, description_extract],
     tokenizer,
     filter,
@@ -94,7 +71,7 @@ add_document_to_index(
 );
 
 add_document_to_index(
-    &mut idx,
+    &mut index,
     &[title_extract, description_extract],
     tokenizer,
     filter,
@@ -102,9 +79,9 @@ add_document_to_index(
     doc_2,
 );
 
-// Search, expect 2 results
+// Search, expected 2 results
 let mut result = query(
-    &mut idx,
+    &mut index,
     &"abc",
     &mut bm25::new(),
     tokenizer,
@@ -125,6 +102,32 @@ assert_eq!(
     QueryResult {
         key: 1,
         score: 0.28104699650060755
+    }
+);
+
+// Remove documents from index
+let mut removed_docs = HashSet::new();
+remove_document_from_index(&mut index, &mut removed_docs, doc_1.id);
+
+// Vacuum to remove completely
+vacuum_index(&mut index, &mut removed_docs);
+
+// Search, expect 1 result
+result = query(
+    &mut index,
+    &"abc",
+    &mut bm25::new(),
+    tokenizer,
+    filter,
+    &[1., 1.],
+    Some(&removed_docs),
+);
+assert_eq!(result.len(), 1);
+assert_eq!(
+    result[0],
+    QueryResult {
+        key: 1,
+        score: 0.1166450426074421
     }
 );
 ```

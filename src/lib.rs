@@ -21,7 +21,7 @@ pub mod test_util {
     }
     fn tokenizer(s: &str) -> Vec<String> {
         s.split(' ')
-            .map(|slice| slice.to_owned())
+            .map(|slice| slice.to_owned().to_lowercase())
             .collect::<Vec<String>>()
     }
     fn title_extract(d: &Doc) -> Option<&str> {

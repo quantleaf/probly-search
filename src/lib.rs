@@ -54,6 +54,8 @@ pub mod test_util {
             sort
         });
 
+        assert_eq!(expected.len(), results.len());
+
         for (index, result) in results.iter().enumerate() {
             assert_eq!(expected[index], *result);
             assert_eq!(approx_equal(expected[index].score, result.score, 8), true)

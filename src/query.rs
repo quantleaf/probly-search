@@ -13,8 +13,6 @@ use std::{
     hash::Hash,
 };
 
-use typed_generational_arena::StandardIndex as ArenaIndex;
-
 use self::score::calculator::{FieldData, TermData};
 extern crate typed_generational_arena;
 /**
@@ -78,8 +76,6 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
 ) -> Vec<QueryResult<T>> {
     let query_terms = tokenizer(query);
     let mut scores: HashMap<T, f64> = HashMap::new();
-
-    let mut visited_nodes_score: HashMap<usize, f64> = HashMap::new();
     for (query_term_index, query_term_pre_filter) in query_terms.iter().enumerate() {
         let query_term = filter(query_term_pre_filter);
         if !query_term.is_empty() {
@@ -95,7 +91,7 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                     if let Some(term_node_option_first_doc) = term_node.first_doc {
                         if document_frequency > 0 {
                             let term_expansion_data = TermData {
-                                query_term_index: query_term_index,
+                                query_term_index,
                                 all_query_terms: &query_terms,
                                 query_term: &query_term,
                                 query_term_expanded: &query_term_expanded,
@@ -130,8 +126,6 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                                             visited_documents_for_term.contains(key),
                                         );
                                         scores.insert(key.to_owned(), new_score);
-                                        visited_nodes_score
-                                            .insert(term_node_index.to_idx(), new_score);
                                     }
                                 }
                                 visited_documents_for_term.insert(key.to_owned());

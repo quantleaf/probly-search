@@ -1,11 +1,14 @@
 use crate::{
-    index::{DocumentDetails, DocumentPointer, FieldDetails},
+    index::{DocumentDetails, DocumentPointer, FieldDetails, InvertedIndexNode},
     query::QueryResult,
 };
 use std::{collections::HashMap, fmt::Debug};
+use typed_generational_arena::StandardIndex as ArenaIndex;
 
 pub struct TermData<'a> {
     // The current query term
+    pub query_term_index: usize,
+
     pub query_term: &'a str,
 
     // The current expanded term from the expanded terms generated from the current query term `query_term`
@@ -58,6 +61,7 @@ pub trait ScoreCalculator<T: Debug, M> {
         before_output: Option<&M>,
         document_pointer: &DocumentPointer<T>,
         document_details: &DocumentDetails<T>,
+        index_node: &ArenaIndex<InvertedIndexNode<T>>,
         field_data: &FieldData,
         term_expansion: &TermData,
     ) -> Option<f64>;

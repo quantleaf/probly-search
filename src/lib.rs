@@ -21,7 +21,7 @@ pub mod test_util {
     }
     fn tokenizer(s: &str) -> Vec<String> {
         s.split(' ')
-            .map(|slice| slice.to_owned())
+            .map(|slice| slice.to_owned().to_lowercase())
             .collect::<Vec<String>>()
     }
     fn title_extract(d: &Doc) -> Option<&str> {
@@ -53,6 +53,8 @@ pub mod test_util {
             sort = sort.then_with(|| a.key.partial_cmp(&b.key).unwrap());
             sort
         });
+
+        assert_eq!(expected.len(), results.len());
 
         for (index, result) in results.iter().enumerate() {
             assert_eq!(expected[index], *result);

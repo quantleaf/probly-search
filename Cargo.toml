@@ -21,7 +21,8 @@ lazy_static = "1.4.0"
 rand = "0.8.3"
 criterion = {version ="0.3" , features  = ["html_reports"]}
 
-
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [[bench]]
 name = "test_benchmark"

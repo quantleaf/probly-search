@@ -36,14 +36,11 @@ pub fn max_score_merger(
     score: &f64,
     previous_score: Option<&f64>,
     document_visited_for_term: bool,
-    node_visited_for_term: bool,
 ) -> f64 {
     {
         if let Some(p) = previous_score {
             if document_visited_for_term {
                 f64::max(p.to_owned(), score.to_owned())
-            } else if node_visited_for_term {
-                (p + score) / 2.
             } else {
                 p + score
             }
@@ -79,11 +76,8 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
 ) -> Vec<QueryResult<T>> {
     let query_terms = tokenizer(query);
     let mut scores: HashMap<T, f64> = HashMap::new();
-    let mut visited_indices: HashSet<usize> = HashSet::new();
-
-    for query_term_pre_filter in &query_terms {
+    for (query_term_index, query_term_pre_filter) in query_terms.iter().enumerate() {
         let query_term = filter(query_term_pre_filter);
-        print!("{}", query_term);
         if !query_term.is_empty() {
             let expanded_terms = expand_term(index, &query_term, &index.arena_index);
             let mut visited_documents_for_term: HashSet<T> = HashSet::new();
@@ -97,6 +91,7 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                     if let Some(term_node_option_first_doc) = term_node.first_doc {
                         if document_frequency > 0 {
                             let term_expansion_data = TermData {
+                                query_term_index,
                                 all_query_terms: &query_terms,
                                 query_term: &query_term,
                                 query_term_expanded: &query_term_expanded,
@@ -117,6 +112,7 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                                         pre_calculations.as_ref(),
                                         pointer_borrowed,
                                         index.docs.get(key).unwrap(),
+                                        &term_node_index,
                                         &FieldData {
                                             fields_boost,
                                             fields,
@@ -128,7 +124,6 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                                             s,
                                             scores.get(key),
                                             visited_documents_for_term.contains(key),
-                                            visited_indices.contains(&term_node_index.to_idx()),
                                         );
                                         scores.insert(key.to_owned(), new_score);
                                     }
@@ -138,7 +133,6 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                             }
                         }
                     }
-                    visited_indices.insert(term_node_index.to_idx());
                 }
             }
         }
@@ -148,10 +142,9 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
     for (key, score) in scores {
         result.push(QueryResult { key, score });
     }
+    score_calculator.finalize(&mut result);
 
     result.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
-
-    score_calculator.finalize(&mut result);
 
     result
 }
@@ -223,11 +216,7 @@ mod tests {
         title: String,
         text: String,
     }
-    fn tokenizer(s: &str) -> Vec<String> {
-        s.split(' ')
-            .map(|slice| slice.to_owned())
-            .collect::<Vec<String>>()
-    }
+
     fn title_extract(d: &Doc) -> Option<&str> {
         Some(d.title.as_str())
     }
@@ -235,7 +224,12 @@ mod tests {
         Some(d.text.as_str())
     }
 
-    fn filter(s: &str) -> String {
+    pub fn tokenizer(s: &str) -> Vec<String> {
+        s.split(' ')
+            .map(|slice| slice.to_owned())
+            .collect::<Vec<String>>()
+    }
+    pub fn filter(s: &str) -> String {
         s.to_owned()
     }
 

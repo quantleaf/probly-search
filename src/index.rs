@@ -274,7 +274,6 @@ fn add_inverted_index_doc<T: Clone>(
         doc.next = Some(first);
     }
     let doc_index = arena_doc.insert(doc);
-
     node_value.first_doc = Some(doc_index);
 }
 
@@ -295,46 +294,41 @@ pub fn add_document_to_index<T: Eq + Hash + Copy, D>(
 ) {
     let docs = &mut index.docs;
     let fields = &mut index.fields;
-    let mut field_length = Vec::new();
+    let mut field_length = vec![0; fields.len()];
     let mut term_counts: HashMap<String, Vec<usize>> = HashMap::new();
     let mut all_terms: Vec<String> = Vec::new();
     for i in 0..fields.len() {
-        match field_accessors[i](&doc) {
-            None => {
-                field_length.push(0);
-            }
-            Some(field_value) => {
-                let fields_len = fields.len();
-                let mut field_details = fields.get_mut(i).unwrap();
+        if let Some(field_value) = field_accessors[i](&doc) {
+            let fields_len = fields.len();
+            let mut field_details = fields.get_mut(i).unwrap();
 
-                // tokenize text
-                let terms = tokenizer(field_value);
+            // tokenize text
+            let terms = tokenizer(field_value);
 
-                // filter and count terms, ignore empty strings
-                let mut filtered_terms_count = 0;
-                for mut term in terms {
-                    term = filter(&term);
-                    if !term.is_empty() {
-                        all_terms.push(term.to_owned());
-                        filtered_terms_count += 1;
-                        let counts = term_counts.get_mut(&term);
-                        match counts {
-                            None => {
-                                let mut new_count = vec![0; fields_len];
-                                new_count[i] += 1;
-                                term_counts.insert(term, new_count);
-                            }
-                            Some(c) => {
-                                c[i] += 1;
-                            }
+            // filter and count terms, ignore empty strings
+            let mut filtered_terms_count = 0;
+            for mut term in terms {
+                term = filter(&term);
+                if !term.is_empty() {
+                    all_terms.push(term.to_owned());
+                    filtered_terms_count += 1;
+                    let counts = term_counts.get_mut(&term);
+                    match counts {
+                        None => {
+                            let mut new_count = vec![0; fields_len];
+                            new_count[i] += 1;
+                            term_counts.insert(term, new_count);
+                        }
+                        Some(c) => {
+                            c[i] += 1;
                         }
                     }
                 }
-
-                field_details.sum += filtered_terms_count;
-                field_details.avg = field_details.sum as f64 / (docs.len() as f64 + 1_f64);
-                field_length.push(filtered_terms_count);
             }
+
+            field_details.sum += filtered_terms_count;
+            field_details.avg = field_details.sum as f64 / (docs.len() as f64 + 1_f64);
+            field_length[i] = filtered_terms_count;
         }
     }
 
@@ -387,10 +381,7 @@ fn create_inverted_index_nodes<T: Clone>(
     term: &str,
     start: &usize,
 ) -> ArenaIndex<InvertedIndexNode<T>> {
-    for (i, char) in term.chars().enumerate() {
-        if &i < start {
-            continue;
-        }
+    for char in term.chars().skip(start.to_owned()) {
         let new_node = arena_index.insert(create_inverted_index_node(&char));
         let new_parent = {
             add_inverted_index_child_node(parent, new_node, arena_index); // unsafe { .get().as_mut().unwrap() }
@@ -414,7 +405,6 @@ pub fn remove_document_from_index<T: Hash + Eq + Copy>(
     removed: &mut HashSet<T>,
     key: T,
 ) {
-    //
     let fields = &mut index.fields;
     let doc_details_option = index.docs.get(&key);
     let mut remove_key = false;

@@ -5,9 +5,10 @@
 use std::{collections::HashMap, fmt::Debug};
 
 use crate::{
-    index::{DocumentDetails, DocumentPointer},
+    index::{DocumentDetails, DocumentPointer, InvertedIndexNode},
     query::score::calculator::{FieldData, ScoreCalculator, TermData},
 };
+use typed_generational_arena::StandardIndex as ArenaIndex;
 
 pub struct BM25 {
     /// `bm25k1` BM25 ranking function constant `k1`, controls non-linear term frequency normalization (saturation).
@@ -62,6 +63,7 @@ impl<T: Debug> ScoreCalculator<T, BM25TermCalculations> for BM25 {
         before_output: Option<&BM25TermCalculations>,
         document_pointer: &DocumentPointer<T>,
         document_details: &DocumentDetails<T>,
+        _: &ArenaIndex<InvertedIndexNode<T>>,
         field_data: &FieldData,
         _: &TermData,
     ) -> Option<f64> {

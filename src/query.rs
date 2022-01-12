@@ -66,7 +66,7 @@ Arguments
 returns Array of QueryResult structs
 */
 pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
-    mut index: &mut Index<T>,
+    index: &mut Index<T>,
     query: &str,
     score_calculator: &mut S,
     tokenizer: Tokenizer,
@@ -86,7 +86,7 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                     find_inverted_index_node(index.root, &query_term_expanded, &index.arena_index);
                 if let Some(term_node_index) = term_node_option {
                     let document_frequency =
-                        disconnect_and_count_documents(&mut index, term_node_index, removed);
+                        disconnect_and_count_documents(index, term_node_index, removed);
                     let term_node = index.arena_index.get(term_node_index).unwrap();
                     if let Some(term_node_option_first_doc) = term_node.first_doc {
                         if document_frequency > 0 {

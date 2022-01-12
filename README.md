@@ -31,10 +31,9 @@ https://quantleaf.github.io/probly-search-demo/
 Documentation is under development. For now read the source tests.
 
 ### Example
-*Creating an index with a document that has 2 fields. Query documents, and remove a document.*
-
 For all working examples see [Integration tests](/tests/integrations_tests.rs).
 
+*Creating an index with a document that has 2 fields. Query documents, and remove a document.*
 ```rust
 use std::collections::HashSet;
 use probly_search::{

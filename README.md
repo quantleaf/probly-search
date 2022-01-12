@@ -32,6 +32,9 @@ Documentation is under development. For now read the source tests.
 
 ### Example
 *Creating an index with a document that has 2 fields. Query documents, and remove a document.*
+
+For all working examples see [Integration tests](/tests/integrations_tests.rs).
+
 ```rust
 use std::collections::HashSet;
 use probly_search::{
@@ -42,6 +45,30 @@ use probly_search::{
         QueryResult,
     },
 };
+
+// A white space tokenizer
+fn tokenizer(s: &str) -> Vec<String> {
+    s.split(' ')
+        .map(|slice| slice.to_owned())
+        .collect::<Vec<String>>()
+}
+
+// We have to provide extraction functions for the fields we want to index
+
+// Title
+fn title_extract(d: &Doc) -> Option<&str> {
+    Some(d.title.as_str())
+}
+
+// Description
+fn description_extract(d: &Doc) -> Option<&str> {
+    Some(d.description.as_str())
+}
+
+// A no-op filter
+fn filter(s: &str) -> String {
+    s.to_owned()
+}
 
 
 // Create index with 2 fields

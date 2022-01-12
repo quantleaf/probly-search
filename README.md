@@ -28,11 +28,13 @@ https://quantleaf.github.io/probly-search-demo/
 
 
 ## Documentation 
-Documentation is under development. For now read the source tests.
+### Adding, Removing and Searching documents
+See [Integration tests](/tests/integrations_tests.rs).
 
-### Example
-For all working examples see [Integration tests](/tests/integrations_tests.rs).
+### Use this library with WASM
+See [recipe search demo project](https://github.com/quantleaf/probly-search-demo/tree/master/probly-search-wasm)
 
+### A basic example
 *Creating an index with a document that has 2 fields. Query documents, and remove a document.*
 ```rust
 use std::collections::HashSet;

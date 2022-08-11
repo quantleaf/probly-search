@@ -593,7 +593,14 @@ mod tests {
                 text: "a b c".to_string(),
             };
 
-            add_document_to_index(&mut index, &field_accessors, tokenizer, filter, doc.id, &doc);
+            add_document_to_index(
+                &mut index,
+                &field_accessors,
+                tokenizer,
+                filter,
+                doc.id,
+                &doc,
+            );
 
             assert_eq!(index.docs.len(), 1);
             let (_, added_doc) = index.docs.iter().next().unwrap();
@@ -871,7 +878,14 @@ mod tests {
                     text: "abe".to_string(),
                 };
 
-                add_document_to_index(&mut index, &field_accessors, tokenizer, filter, doc.id, &doc);
+                add_document_to_index(
+                    &mut index,
+                    &field_accessors,
+                    tokenizer,
+                    filter,
+                    doc.id,
+                    &doc,
+                );
                 add_document_to_index(
                     &mut index,
                     &field_accessors,
@@ -899,7 +913,14 @@ mod tests {
                     text: "ab ef".to_string(),
                 };
 
-                add_document_to_index(&mut index, &field_accessors, tokenizer, filter, doc.id, &doc);
+                add_document_to_index(
+                    &mut index,
+                    &field_accessors,
+                    tokenizer,
+                    filter,
+                    doc.id,
+                    &doc,
+                );
                 add_document_to_index(
                     &mut index,
                     &field_accessors,

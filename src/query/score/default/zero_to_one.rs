@@ -340,7 +340,7 @@ mod tests {
                 tokenizer,
                 filter,
                 doc.id,
-                doc,
+                &doc,
             );
         }
 
@@ -391,7 +391,7 @@ mod tests {
                 tokenizer,
                 filter,
                 doc.id,
-                doc,
+                &doc,
             );
         }
 

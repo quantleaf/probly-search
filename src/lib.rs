@@ -73,7 +73,7 @@ pub mod test_util {
                 id: i,
                 title: title.to_string(),
             };
-            add_document_to_index(&mut index, &[title_extract], tokenizer, filter, doc.id, doc);
+            add_document_to_index(&mut index, &[title_extract], tokenizer, filter, doc.id, &doc);
         }
         index
     }

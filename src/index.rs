@@ -290,7 +290,7 @@ pub fn add_document_to_index<T: Eq + Hash + Copy, D>(
     tokenizer: Tokenizer,
     filter: Filter,
     key: T,
-    doc: D,
+    doc: &D,
 ) {
     let docs = &mut index.docs;
     let fields = &mut index.fields;
@@ -298,7 +298,7 @@ pub fn add_document_to_index<T: Eq + Hash + Copy, D>(
     let mut term_counts: HashMap<String, Vec<usize>> = HashMap::new();
     let mut all_terms: Vec<String> = Vec::new();
     for i in 0..fields.len() {
-        if let Some(field_value) = field_accessors[i](&doc) {
+        if let Some(field_value) = field_accessors[i](doc) {
             let fields_len = fields.len();
             let mut field_details = fields.get_mut(i).unwrap();
 
@@ -593,7 +593,7 @@ mod tests {
                 text: "a b c".to_string(),
             };
 
-            add_document_to_index(&mut index, &field_accessors, tokenizer, filter, doc.id, doc);
+            add_document_to_index(&mut index, &field_accessors, tokenizer, filter, doc.id, &doc);
 
             assert_eq!(index.docs.len(), 1);
             let (_, added_doc) = index.docs.iter().next().unwrap();
@@ -655,7 +655,7 @@ mod tests {
                 tokenizer,
                 filter,
                 doc_1.id,
-                doc_1.clone(),
+                &doc_1,
             );
 
             add_document_to_index(
@@ -664,7 +664,7 @@ mod tests {
                 tokenizer,
                 filter,
                 doc_2.id,
-                doc_2.clone(),
+                &doc_2,
             );
 
             assert_eq!(index.docs.len(), 2);
@@ -725,7 +725,7 @@ mod tests {
                 tokenizer,
                 filter,
                 doc_1.id,
-                doc_1,
+                &doc_1,
             );
         }
     }
@@ -751,7 +751,7 @@ mod tests {
                     tokenizer,
                     filter,
                     doc.id,
-                    doc,
+                    &doc,
                 )
             }
 
@@ -871,14 +871,14 @@ mod tests {
                     text: "abe".to_string(),
                 };
 
-                add_document_to_index(&mut index, &field_accessors, tokenizer, filter, doc.id, doc);
+                add_document_to_index(&mut index, &field_accessors, tokenizer, filter, doc.id, &doc);
                 add_document_to_index(
                     &mut index,
                     &field_accessors,
                     tokenizer,
                     filter,
                     doc_2.id,
-                    doc_2,
+                    &doc_2,
                 );
                 assert_eq!(count_nodes(&index), 5); //
             }
@@ -899,14 +899,14 @@ mod tests {
                     text: "ab ef".to_string(),
                 };
 
-                add_document_to_index(&mut index, &field_accessors, tokenizer, filter, doc.id, doc);
+                add_document_to_index(&mut index, &field_accessors, tokenizer, filter, doc.id, &doc);
                 add_document_to_index(
                     &mut index,
                     &field_accessors,
                     tokenizer,
                     filter,
                     doc_2.id,
-                    doc_2,
+                    &doc_2,
                 );
                 assert_eq!(count_nodes(&index), 7); //
             }

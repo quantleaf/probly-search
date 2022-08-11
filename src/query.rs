@@ -258,7 +258,7 @@ mod tests {
                     tokenizer,
                     filter,
                     doc.id,
-                    doc,
+                    &doc,
                 );
             }
             let result = query(
@@ -301,7 +301,7 @@ mod tests {
                     tokenizer,
                     filter,
                     doc.id,
-                    doc,
+                    &doc,
                 );
             }
 
@@ -357,7 +357,7 @@ mod tests {
                     tokenizer,
                     filter,
                     doc.id,
-                    doc,
+                    &doc,
                 );
             }
 
@@ -401,7 +401,7 @@ mod tests {
                     tokenizer,
                     filter,
                     doc.id,
-                    doc,
+                    &doc,
                 );
             }
 
@@ -446,7 +446,7 @@ mod tests {
                     tokenizer,
                     filter,
                     doc.id,
-                    doc,
+                    &doc,
                 );
             }
 
@@ -505,7 +505,7 @@ mod tests {
                     tokenizer,
                     filter,
                     doc.id,
-                    doc,
+                    &doc,
                 );
             }
             let exp = expand_term(&index, &"a".to_string(), &index.arena_index);
@@ -535,7 +535,7 @@ mod tests {
                     tokenizer,
                     filter,
                     doc.id,
-                    doc,
+                    &doc,
                 );
             }
             let exp = expand_term(&index, &"x".to_string(), &index.arena_index);

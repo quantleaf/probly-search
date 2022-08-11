@@ -62,6 +62,6 @@ fn add_all_documents(
             id: i,
             title: s.to_owned(),
         };
-        add_document_to_index(&mut index, extractor, tokenizer, filter, d.id, d);
+        add_document_to_index(&mut index, extractor, tokenizer, filter, d.id, &d);
     }
 }

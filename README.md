@@ -95,7 +95,7 @@ add_document_to_index(
     tokenizer,
     filter,
     doc_1.id,
-    doc_1.clone(),
+    &doc_1,
 );
 
 add_document_to_index(
@@ -104,7 +104,7 @@ add_document_to_index(
     tokenizer,
     filter,
     doc_2.id,
-    doc_2,
+    &doc_2,
 );
 
 // Search, expected 2 results

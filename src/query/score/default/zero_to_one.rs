@@ -71,7 +71,7 @@ impl<T: Debug + Eq + Hash + Clone> ScoreCalculator<T, ZeroToOneBeforeCalculation
                 }
 
                 self.score_by_document_and_field
-                    .get_mut(&key.to_owned())
+                    .get_mut(key)
                     .unwrap()[x]
                     .push(ScoreByTerm {
                         score: 1. - f64::abs(term_exp_len - term_len) / (term_exp_len),

@@ -15,10 +15,8 @@ struct Doc {
     description: String,
 }
 
-fn tokenizer(s: &str) -> Vec<String> {
-    s.split(' ')
-        .map(|slice| slice.to_owned())
-        .collect::<Vec<String>>()
+fn tokenizer(s: &str) -> Vec<&str> {
+    s.split(' ').collect::<Vec<_>>()
 }
 fn title_extract(d: &Doc) -> Option<&str> {
     Some(d.title.as_str())
@@ -28,8 +26,8 @@ fn description_extract(d: &Doc) -> Option<&str> {
     Some(d.description.as_str())
 }
 
-fn filter(s: &str) -> String {
-    s.to_owned()
+fn filter(s: &str) -> &str {
+    s
 }
 
 #[test]

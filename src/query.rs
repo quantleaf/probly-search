@@ -79,7 +79,7 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
     for (query_term_index, query_term_pre_filter) in query_terms.iter().enumerate() {
         let query_term = filter(query_term_pre_filter);
         if !query_term.is_empty() {
-            let expanded_terms = expand_term(index, &query_term, &index.arena_index);
+            let expanded_terms = expand_term(index, query_term, &index.arena_index);
             let mut visited_documents_for_term: HashSet<T> = HashSet::new();
             for query_term_expanded in expanded_terms {
                 let term_node_option =
@@ -92,8 +92,8 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                         if document_frequency > 0 {
                             let term_expansion_data = TermData {
                                 query_term_index,
-                                all_query_terms: &query_terms,
-                                query_term: &query_term,
+                                all_query_terms: query_terms.clone(),
+                                query_term,
                                 query_term_expanded: &query_term_expanded,
                             };
                             let pre_calculations = &score_calculator.before_each(
@@ -224,13 +224,12 @@ mod tests {
         Some(d.text.as_str())
     }
 
-    pub fn tokenizer(s: &str) -> Vec<String> {
-        s.split(' ')
-            .map(|slice| slice.to_owned())
-            .collect::<Vec<String>>()
+    pub fn tokenizer(s: &str) -> Vec<&str> {
+        s.split(' ').collect::<Vec<_>>()
     }
-    pub fn filter(s: &str) -> String {
-        s.to_owned()
+
+    pub fn filter(s: &str) -> &str {
+        s
     }
 
     pub mod query {
@@ -405,9 +404,9 @@ mod tests {
                 );
             }
 
-            fn custom_filter(s: &str) -> String {
+            fn custom_filter(s: &str) -> &str {
                 if s == "a" {
-                    return "".to_string();
+                    return "";
                 }
                 filter(s)
             }

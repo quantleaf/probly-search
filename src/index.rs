@@ -81,7 +81,7 @@ Document Details object stores additional information about documents.
  * typeparam `T` Document key.
  */
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct DocumentDetails<T> {
     /**
     Document key. It can be a simple unique ID or a direct reference to original document.
@@ -308,16 +308,16 @@ pub fn add_document_to_index<T: Eq + Hash + Copy, D>(
             // filter and count terms, ignore empty strings
             let mut filtered_terms_count = 0;
             for mut term in terms {
-                term = filter(&term);
+                term = filter(term);
                 if !term.is_empty() {
                     all_terms.push(term.to_owned());
                     filtered_terms_count += 1;
-                    let counts = term_counts.get_mut(&term);
+                    let counts = term_counts.get_mut(term);
                     match counts {
                         None => {
                             let mut new_count = vec![0; fields_len];
                             new_count[i] += 1;
-                            term_counts.insert(term, new_count);
+                            term_counts.insert(term.to_owned(), new_count);
                         }
                         Some(c) => {
                             c[i] += 1;
@@ -565,14 +565,12 @@ mod tests {
         text: String,
     }
 
-    fn tokenizer(s: &str) -> Vec<String> {
-        s.split(' ')
-            .map(|slice| slice.to_owned())
-            .collect::<Vec<String>>()
+    fn tokenizer(s: &str) -> Vec<&str> {
+        s.split(' ').collect::<Vec<_>>()
     }
 
-    fn filter(s: &str) -> String {
-        s.to_owned()
+    fn filter(s: &str) -> &str {
+        s
     }
     fn field_accessor(doc: &Doc) -> Option<&str> {
         Some(doc.text.as_str())

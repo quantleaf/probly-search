@@ -295,8 +295,8 @@ pub fn add_document_to_index<T: Eq + Hash + Copy, D>(
     let docs = &mut index.docs;
     let fields = &mut index.fields;
     let mut field_length = vec![0; fields.len()];
-    let mut term_counts: HashMap<String, Vec<usize>> = HashMap::new();
-    let mut all_terms: Vec<String> = Vec::new();
+    let mut term_counts: HashMap<&str, Vec<usize>> = HashMap::new();
+    let mut all_terms: Vec<&str> = Vec::new();
     for i in 0..fields.len() {
         if let Some(field_value) = field_accessors[i](doc) {
             let fields_len = fields.len();
@@ -310,14 +310,14 @@ pub fn add_document_to_index<T: Eq + Hash + Copy, D>(
             for mut term in terms {
                 term = filter(term);
                 if !term.is_empty() {
-                    all_terms.push(term.to_owned());
+                    all_terms.push(term);
                     filtered_terms_count += 1;
                     let counts = term_counts.get_mut(term);
                     match counts {
                         None => {
                             let mut new_count = vec![0; fields_len];
                             new_count[i] += 1;
-                            term_counts.insert(term.to_owned(), new_count);
+                            term_counts.insert(term, new_count);
                         }
                         Some(c) => {
                             c[i] += 1;
@@ -339,7 +339,7 @@ pub fn add_document_to_index<T: Eq + Hash + Copy, D>(
             let node = index.arena_index.get(node_index).unwrap();
             if node.first_child.is_none() {
                 node_index =
-                    create_inverted_index_nodes(&mut index.arena_index, node_index, &term, &i);
+                    create_inverted_index_nodes(&mut index.arena_index, node_index, term, &i);
                 break;
             }
             let next_node =
@@ -347,7 +347,7 @@ pub fn add_document_to_index<T: Eq + Hash + Copy, D>(
             match next_node {
                 None => {
                     node_index =
-                        create_inverted_index_nodes(&mut index.arena_index, node_index, &term, &i);
+                        create_inverted_index_nodes(&mut index.arena_index, node_index, term, &i);
                     break;
                 }
                 Some(n) => {
@@ -360,7 +360,7 @@ pub fn add_document_to_index<T: Eq + Hash + Copy, D>(
             DocumentPointer {
                 next: None,
                 details_key: key.to_owned(),
-                term_frequency: term_counts[&term].to_owned(),
+                term_frequency: term_counts[term].to_owned(),
             },
             &mut index.arena_doc,
         )

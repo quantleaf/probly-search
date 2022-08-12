@@ -48,10 +48,8 @@ use probly_search::{
 };
 
 // A white space tokenizer
-fn tokenizer(s: &str) -> Vec<String> {
-    s.split(' ')
-        .map(|slice| slice.to_owned())
-        .collect::<Vec<String>>()
+fn tokenizer(s: &str) -> Vec<&str> {
+     s.split(' ').collect::<Vec<_>>()
 }
 
 // We have to provide extraction functions for the fields we want to index
@@ -67,8 +65,8 @@ fn description_extract(d: &Doc) -> Option<&str> {
 }
 
 // A no-op filter
-fn filter(s: &str) -> String {
-    s.to_owned()
+fn filter(s: &str) -> &str {
+   s
 }
 
 

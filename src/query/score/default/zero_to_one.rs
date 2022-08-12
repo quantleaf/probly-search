@@ -70,17 +70,14 @@ impl<T: Debug + Eq + Hash + Clone> ScoreCalculator<T, ZeroToOneBeforeCalculation
                         .insert(key.to_owned(), score_by_field);
                 }
 
-                self.score_by_document_and_field
-                    .get_mut(key)
-                    .unwrap()[x]
-                    .push(ScoreByTerm {
-                        score: 1. - f64::abs(term_exp_len - term_len) / (term_exp_len),
-                        all_query_terms_len: term_data.all_query_terms.len(),
-                        query_term_index: term_data.query_term_index.to_owned(),
-                        index_node_id: index_node.to_idx(),
-                        term_frequency: tf,
-                        field_length,
-                    });
+                self.score_by_document_and_field.get_mut(key).unwrap()[x].push(ScoreByTerm {
+                    score: 1. - f64::abs(term_exp_len - term_len) / (term_exp_len),
+                    all_query_terms_len: term_data.all_query_terms.len(),
+                    query_term_index: term_data.query_term_index.to_owned(),
+                    index_node_id: index_node.to_idx(),
+                    term_frequency: tf,
+                    field_length,
+                });
             }
         }
         Some(0.) // A dummy value, we do not know the score yet

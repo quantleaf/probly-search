@@ -19,17 +19,15 @@ pub mod test_util {
         id: usize,
         title: String,
     }
-    fn tokenizer(s: &str) -> Vec<String> {
-        s.split(' ')
-            .map(|slice| slice.to_owned().to_lowercase())
-            .collect::<Vec<String>>()
+    fn tokenizer(s: &str) -> Vec<&str> {
+        s.split(' ').collect::<Vec<_>>()
     }
     fn title_extract(d: &Doc) -> Option<&str> {
         Some(d.title.as_str())
     }
 
-    fn filter(s: &str) -> String {
-        s.to_owned()
+    fn filter(s: &str) -> &str {
+        s
     }
 
     pub fn test_score<'arena, M, S: ScoreCalculator<usize, M>>(
@@ -73,7 +71,14 @@ pub mod test_util {
                 id: i,
                 title: title.to_string(),
             };
-            add_document_to_index(&mut index, &[title_extract], tokenizer, filter, doc.id, doc);
+            add_document_to_index(
+                &mut index,
+                &[title_extract],
+                tokenizer,
+                filter,
+                doc.id,
+                &doc,
+            );
         }
         index
     }

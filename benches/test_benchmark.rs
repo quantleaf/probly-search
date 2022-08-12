@@ -8,13 +8,11 @@ struct DocX {
     title: String,
 }
 
-fn filter(s: &str) -> String {
-    s.to_owned()
+fn filter(s: &str) -> &str {
+    s
 }
-fn tokenizer(s: &str) -> Vec<String> {
-    s.split(' ')
-        .map(|slice| slice.to_owned())
-        .collect::<Vec<String>>()
+fn tokenizer(s: &str) -> Vec<&str> {
+    s.split(' ').collect::<Vec<_>>()
 }
 
 pub fn test_speed(c: &mut Criterion) {
@@ -62,6 +60,6 @@ fn add_all_documents(
             id: i,
             title: s.to_owned(),
         };
-        add_document_to_index(&mut index, extractor, tokenizer, filter, d.id, d);
+        add_document_to_index(&mut index, extractor, tokenizer, filter, d.id, &d);
     }
 }

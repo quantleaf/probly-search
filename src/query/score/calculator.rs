@@ -15,7 +15,7 @@ pub struct TermData<'a> {
     pub query_term_expanded: &'a str,
 
     // All available query terms
-    pub all_query_terms: &'a Vec<String>,
+    pub all_query_terms: Vec<&'a str>,
 }
 
 pub struct FieldData<'a> {

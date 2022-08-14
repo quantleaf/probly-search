@@ -33,7 +33,7 @@ https://quantleaf.github.io/probly-search-demo/
 See [Integration tests](/tests/integrations_tests.rs).
 
 ### Use this library with WASM
-See [recipe search demo project](https://github.com/quantleaf/probly-search-demo/tree/master/probly-search-wasm)
+See [recipe search demo project](https://github.com/quantleaf/probly-search-demo)
 
 ### A basic example
 *Creating an index with a document that has 2 fields. Query documents, and remove a document.*

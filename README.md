@@ -3,7 +3,7 @@
 [Latest Version]: https://img.shields.io/crates/v/probly-search.svg
 [crates.io]: https://crates.io/crates/probly-search
 
-A full-text search library, optimized for insertion speed, that provides full control over the scoring calculations.
+A full-text search library, written in Rust, optimized for insertion speed, that provides full control over the scoring calculations.
 
 This start initially as a port of the Node library [NDX](https://github.com/ndx-search/ndx).
 
@@ -25,6 +25,7 @@ https://quantleaf.github.io/probly-search-demo/
 - Configurable tokenizer and term filter.
 - Free text queries with query expansion.
 - Fast allocation, but latent deletion.
+- WASM compatible
 
 
 ## Documentation 
@@ -159,6 +160,19 @@ assert_eq!(
 ```
 
 Go through source tests in for the [BM25 implementation](https://github.com/quantleaf/probly-search/blob/master/src/query/score/default/bm25.rs) and [zero-to-one implementation](https://github.com/quantleaf/probly-search/blob/master/src/query/score/default/zero_to_one.rs) for more query examples.
+
+## Testing
+Run all tests with
+```rust
+cargo test
+```
+
+## Benchmark
+Run all benchmarks with
+```rust
+cargo bench
+```
+
 ## License
 
 [MIT](http://opensource.org/licenses/MIT)

@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use probly_search::index::{add_document_to_index, create_index_with_capacity, Index};
+use probly_search::index::{create_index_with_capacity, Index};
 
 criterion_group!(benches, test_speed);
 criterion_main!(benches);
@@ -51,7 +51,7 @@ pub fn test_speed(c: &mut Criterion) {
 }
 
 fn add_all_documents(
-    mut index: &mut Index<usize>,
+    index: &mut Index<usize>,
     extractor: &[fn(&DocX) -> Option<&str>],
     random_strings: &[String],
 ) {
@@ -60,6 +60,6 @@ fn add_all_documents(
             id: i,
             title: s.to_owned(),
         };
-        add_document_to_index(&mut index, extractor, tokenizer, filter, d.id, &d);
+        index.add_document(extractor, tokenizer, filter, d.id, &d);
     }
 }

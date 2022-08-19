@@ -6,7 +6,7 @@ pub mod utils;
 pub mod test_util {
 
     use crate::{
-        index::{add_document_to_index, create_index, Index},
+        index::{create_index, Index},
         query::{query, score::calculator::ScoreCalculator, QueryResult},
     };
     fn approx_equal(a: f64, b: f64, dp: u8) -> bool {
@@ -71,14 +71,7 @@ pub mod test_util {
                 id: i,
                 title: title.to_string(),
             };
-            add_document_to_index(
-                &mut index,
-                &[title_extract],
-                tokenizer,
-                filter,
-                doc.id,
-                &doc,
-            );
+            index.add_document(&[title_extract], tokenizer, filter, doc.id, &doc);
         }
         index
     }

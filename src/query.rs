@@ -251,8 +251,7 @@ mod tests {
                 },
             ];
             for doc in docs {
-                add_document_to_index(
-                    &mut index,
+                index.add_document(
                     &[title_extract, text_extract],
                     tokenizer,
                     filter,
@@ -294,8 +293,7 @@ mod tests {
             ];
 
             for doc in docs {
-                add_document_to_index(
-                    &mut index,
+                index.add_document(
                     &[title_extract, text_extract],
                     tokenizer,
                     filter,
@@ -350,8 +348,7 @@ mod tests {
             ];
 
             for doc in docs {
-                add_document_to_index(
-                    &mut index,
+                index.add_document(
                     &[title_extract, text_extract],
                     tokenizer,
                     filter,
@@ -394,8 +391,7 @@ mod tests {
             ];
 
             for doc in docs {
-                add_document_to_index(
-                    &mut index,
+                index.add_document(
                     &[title_extract, text_extract],
                     tokenizer,
                     filter,
@@ -439,8 +435,7 @@ mod tests {
             ];
 
             for doc in docs {
-                add_document_to_index(
-                    &mut index,
+                index.add_document(
                     &[title_extract, text_extract],
                     tokenizer,
                     filter,
@@ -498,8 +493,7 @@ mod tests {
             ];
 
             for doc in docs {
-                add_document_to_index(
-                    &mut index,
+                index.add_document(
                     &[title_extract, text_extract],
                     tokenizer,
                     filter,
@@ -528,8 +522,7 @@ mod tests {
             ];
 
             for doc in docs {
-                add_document_to_index(
-                    &mut index,
+                index.add_document(
                     &[title_extract, text_extract],
                     tokenizer,
                     filter,

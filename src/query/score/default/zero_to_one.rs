@@ -133,7 +133,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        index::{add_document_to_index, create_index, Index},
+        index::{create_index, Index},
         query::tests::{filter, tokenizer},
         test_util::{build_test_index, test_score},
     };
@@ -331,8 +331,7 @@ mod tests {
                 title: title.to_string(),
                 description: description.to_string(),
             };
-            add_document_to_index(
-                &mut x,
+            x.add_document(
                 &[title_extract, description_extract],
                 tokenizer,
                 filter,
@@ -382,8 +381,7 @@ mod tests {
                 title: title.to_string(),
                 description: description.to_string(),
             };
-            add_document_to_index(
-                &mut x,
+            x.add_document(
                 &[title_extract, description_extract],
                 tokenizer,
                 filter,

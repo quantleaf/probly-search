@@ -31,13 +31,107 @@ pub struct Index<T> {
     pub arena_doc: StandardArena<DocumentPointer<T>>,
 }
 
-impl<T> Index<T> {
+impl<T: Eq + Hash + Copy> Index<T> {
     pub fn get_root(&self) -> &InvertedIndexNode<T> {
         self.arena_index.get(self.root).unwrap()
     }
 
     pub fn get_root_mut(&mut self) -> &mut InvertedIndexNode<T> {
         self.arena_index.get_mut(self.root).unwrap()
+    }
+
+    /**
+    Adds a document to the index.
+     * typeparam `T` Document key.
+     * `node` Inverted index node.
+     * `doc` Posting.
+    */
+
+    pub fn add_document<D>(
+        &mut self,
+        field_accessors: &[FieldAccessor<D>],
+        tokenizer: Tokenizer,
+        filter: Filter,
+        key: T,
+        doc: &D,
+    ) {
+        let docs = &mut self.docs;
+        let fields = &mut self.fields;
+        let mut field_length = vec![0; fields.len()];
+        let mut term_counts: HashMap<&str, Vec<usize>> = HashMap::new();
+        let mut all_terms: Vec<&str> = Vec::new();
+        for i in 0..fields.len() {
+            if let Some(field_value) = field_accessors[i](doc) {
+                let fields_len = fields.len();
+                let mut field_details = fields.get_mut(i).unwrap();
+
+                // tokenize text
+                let terms = tokenizer(field_value);
+
+                // filter and count terms, ignore empty strings
+                let mut filtered_terms_count = 0;
+                for mut term in terms {
+                    term = filter(term);
+                    if !term.is_empty() {
+                        all_terms.push(term);
+                        filtered_terms_count += 1;
+                        let counts = term_counts.get_mut(term);
+                        match counts {
+                            None => {
+                                let mut new_count = vec![0; fields_len];
+                                new_count[i] += 1;
+                                term_counts.insert(term, new_count);
+                            }
+                            Some(c) => {
+                                c[i] += 1;
+                            }
+                        }
+                    }
+                }
+
+                field_details.sum += filtered_terms_count;
+                field_details.avg = field_details.sum as f64 / (docs.len() as f64 + 1_f64);
+                field_length[i] = filtered_terms_count;
+            }
+        }
+
+        docs.insert(key, DocumentDetails { key, field_length });
+        for term in all_terms {
+            let mut node_index = self.root;
+            for (i, char) in term.chars().enumerate() {
+                let node = self.arena_index.get(node_index).unwrap();
+                if node.first_child.is_none() {
+                    node_index =
+                        create_inverted_index_nodes(&mut self.arena_index, node_index, term, &i);
+                    break;
+                }
+                let next_node =
+                    find_inverted_index_node_child_nodes_by_char(node, &char, &self.arena_index);
+                match next_node {
+                    None => {
+                        node_index = create_inverted_index_nodes(
+                            &mut self.arena_index,
+                            node_index,
+                            term,
+                            &i,
+                        );
+                        break;
+                    }
+                    Some(n) => {
+                        node_index = n;
+                    }
+                }
+            }
+            add_inverted_index_doc(
+                self.arena_index.get_mut(node_index).unwrap(),
+                DocumentPointer {
+                    next: None,
+                    details_key: key.to_owned(),
+                    term_frequency: term_counts[term].to_owned(),
+                },
+                &mut self.arena_doc,
+            )
+        }
     }
 }
 /**
@@ -278,96 +372,6 @@ fn add_inverted_index_doc<T: Clone>(
 }
 
 /**
-Adds a document to the index.
- * typeparam `T` Document key.
- * `node` Inverted index node.
- * `doc` Posting.
-*/
-
-pub fn add_document_to_index<T: Eq + Hash + Copy, D>(
-    index: &mut Index<T>,
-    field_accessors: &[FieldAccessor<D>],
-    tokenizer: Tokenizer,
-    filter: Filter,
-    key: T,
-    doc: &D,
-) {
-    let docs = &mut index.docs;
-    let fields = &mut index.fields;
-    let mut field_length = vec![0; fields.len()];
-    let mut term_counts: HashMap<&str, Vec<usize>> = HashMap::new();
-    let mut all_terms: Vec<&str> = Vec::new();
-    for i in 0..fields.len() {
-        if let Some(field_value) = field_accessors[i](doc) {
-            let fields_len = fields.len();
-            let mut field_details = fields.get_mut(i).unwrap();
-
-            // tokenize text
-            let terms = tokenizer(field_value);
-
-            // filter and count terms, ignore empty strings
-            let mut filtered_terms_count = 0;
-            for mut term in terms {
-                term = filter(term);
-                if !term.is_empty() {
-                    all_terms.push(term);
-                    filtered_terms_count += 1;
-                    let counts = term_counts.get_mut(term);
-                    match counts {
-                        None => {
-                            let mut new_count = vec![0; fields_len];
-                            new_count[i] += 1;
-                            term_counts.insert(term, new_count);
-                        }
-                        Some(c) => {
-                            c[i] += 1;
-                        }
-                    }
-                }
-            }
-
-            field_details.sum += filtered_terms_count;
-            field_details.avg = field_details.sum as f64 / (docs.len() as f64 + 1_f64);
-            field_length[i] = filtered_terms_count;
-        }
-    }
-
-    docs.insert(key, DocumentDetails { key, field_length });
-    for term in all_terms {
-        let mut node_index = index.root;
-        for (i, char) in term.chars().enumerate() {
-            let node = index.arena_index.get(node_index).unwrap();
-            if node.first_child.is_none() {
-                node_index =
-                    create_inverted_index_nodes(&mut index.arena_index, node_index, term, &i);
-                break;
-            }
-            let next_node =
-                find_inverted_index_node_child_nodes_by_char(node, &char, &index.arena_index);
-            match next_node {
-                None => {
-                    node_index =
-                        create_inverted_index_nodes(&mut index.arena_index, node_index, term, &i);
-                    break;
-                }
-                Some(n) => {
-                    node_index = n;
-                }
-            }
-        }
-        add_inverted_index_doc(
-            index.arena_index.get_mut(node_index).unwrap(),
-            DocumentPointer {
-                next: None,
-                details_key: key.to_owned(),
-                term_frequency: term_counts[term].to_owned(),
-            },
-            &mut index.arena_doc,
-        )
-    }
-}
-
-/**
 Creates inverted index nodes for the `term` starting from the `start` character.
  * typeparam `T` Document key.
  * `parent` Parent node.
@@ -591,14 +595,7 @@ mod tests {
                 text: "a b c".to_string(),
             };
 
-            add_document_to_index(
-                &mut index,
-                &field_accessors,
-                tokenizer,
-                filter,
-                doc.id,
-                &doc,
-            );
+            index.add_document(&field_accessors, tokenizer, filter, doc.id, &doc);
 
             assert_eq!(index.docs.len(), 1);
             let (_, added_doc) = index.docs.iter().next().unwrap();
@@ -654,23 +651,9 @@ mod tests {
                 text: "b c d".to_string(),
             };
 
-            add_document_to_index(
-                &mut index,
-                &field_accessors,
-                tokenizer,
-                filter,
-                doc_1.id,
-                &doc_1,
-            );
+            index.add_document(&field_accessors, tokenizer, filter, doc_1.id, &doc_1);
 
-            add_document_to_index(
-                &mut index,
-                &field_accessors,
-                tokenizer,
-                filter,
-                doc_2.id,
-                &doc_2,
-            );
+            index.add_document(&field_accessors, tokenizer, filter, doc_2.id, &doc_2);
 
             assert_eq!(index.docs.len(), 2);
             assert_eq!(
@@ -724,14 +707,7 @@ mod tests {
                 text: "a  b".to_string(), // double space could introduce empty tokens
             };
 
-            add_document_to_index(
-                &mut index,
-                &field_accessors,
-                tokenizer,
-                filter,
-                doc_1.id,
-                &doc_1,
-            );
+            index.add_document(&field_accessors, tokenizer, filter, doc_1.id, &doc_1);
         }
     }
 
@@ -750,14 +726,7 @@ mod tests {
             }];
 
             for doc in docs {
-                add_document_to_index(
-                    &mut index,
-                    &[field_accessor],
-                    tokenizer,
-                    filter,
-                    doc.id,
-                    &doc,
-                )
+                index.add_document(&[field_accessor], tokenizer, filter, doc.id, &doc)
             }
 
             remove_document_from_index(&mut index, &mut removed, 1);
@@ -876,22 +845,8 @@ mod tests {
                     text: "abe".to_string(),
                 };
 
-                add_document_to_index(
-                    &mut index,
-                    &field_accessors,
-                    tokenizer,
-                    filter,
-                    doc.id,
-                    &doc,
-                );
-                add_document_to_index(
-                    &mut index,
-                    &field_accessors,
-                    tokenizer,
-                    filter,
-                    doc_2.id,
-                    &doc_2,
-                );
+                index.add_document(&field_accessors, tokenizer, filter, doc.id, &doc);
+                index.add_document(&field_accessors, tokenizer, filter, doc_2.id, &doc_2);
                 assert_eq!(count_nodes(&index), 5); //
             }
 
@@ -911,22 +866,8 @@ mod tests {
                     text: "ab ef".to_string(),
                 };
 
-                add_document_to_index(
-                    &mut index,
-                    &field_accessors,
-                    tokenizer,
-                    filter,
-                    doc.id,
-                    &doc,
-                );
-                add_document_to_index(
-                    &mut index,
-                    &field_accessors,
-                    tokenizer,
-                    filter,
-                    doc_2.id,
-                    &doc_2,
-                );
+                index.add_document(&field_accessors, tokenizer, filter, doc.id, &doc);
+                index.add_document(&field_accessors, tokenizer, filter, doc_2.id, &doc_2);
                 assert_eq!(count_nodes(&index), 7); //
             }
 

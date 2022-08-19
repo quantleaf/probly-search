@@ -1,7 +1,7 @@
 use std::{collections::HashSet, sync::Mutex};
 
 use probly_search::{
-    index::{add_document_to_index, create_index, remove_document_from_index, vacuum_index, Index},
+    index::{create_index, remove_document_from_index, vacuum_index, Index},
     query::{
         query,
         score::default::{bm25, zero_to_one},
@@ -49,8 +49,7 @@ pub fn test_add_query_delete_bm25() {
     };
 
     // Add documents to index
-    add_document_to_index(
-        &mut index,
+    index.add_document(
         &[title_extract, description_extract],
         tokenizer,
         filter,
@@ -58,8 +57,7 @@ pub fn test_add_query_delete_bm25() {
         &doc_1,
     );
 
-    add_document_to_index(
-        &mut index,
+    index.add_document(
         &[title_extract, description_extract],
         tokenizer,
         filter,
@@ -136,8 +134,7 @@ pub fn test_add_query_delete_zero_to_one() {
         description: "abcd".to_string(),
     };
 
-    add_document_to_index(
-        &mut index,
+    index.add_document(
         &[title_extract, description_extract],
         tokenizer,
         filter,
@@ -145,8 +142,7 @@ pub fn test_add_query_delete_zero_to_one() {
         &doc_1,
     );
 
-    add_document_to_index(
-        &mut index,
+    index.add_document(
         &[title_extract, description_extract],
         tokenizer,
         filter,
@@ -207,8 +203,8 @@ pub fn it_is_thread_safe() {
         title: "abc".to_string(),
         description: "dfg".to_string(),
     };
-    add_document_to_index(
-        &mut *IDX.lock().unwrap(),
+    let mut idx = IDX.lock().unwrap();
+    idx.add_document(
         &[title_extract, description_extract],
         tokenizer,
         filter,

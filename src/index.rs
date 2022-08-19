@@ -74,13 +74,7 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
         self.arena_index.get_mut(self.root).unwrap()
     }
 
-    /**
-    Adds a document to the index.
-     * typeparam `T` Document key.
-     * `node` Inverted index node.
-     * `doc` Posting.
-    */
-
+    /// Adds a document to the index.
     pub fn add_document<D>(
         &mut self,
         field_accessors: &[FieldAccessor<D>],
@@ -171,14 +165,7 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
         }
     }
 
-    /**
-     * Remove document from the index.
-
-     * typeparam `T` Document key.
-     * `index` Index.
-     * `removed` Set of removed document ids.
-     * `key` Document key.
-    */
+    /// Remove document from the index.
     pub fn remove_document(&mut self, removed: &mut HashSet<T>, key: T) {
         let fields = &mut self.fields;
         let doc_details_option = self.docs.get(&key);
@@ -205,24 +192,13 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
         }
     }
 
-    /**
-    Cleans up removed documents from the {@link Index}.
-    Recursively cleans up removed documents from the index.
-     * `T` Document key.
-     * `index` Index.
-     * `removed` Set of removed document ids.
-    */
+    /// Cleans up removed documents from the index.
     pub fn vacuum(&mut self, removed: &mut HashSet<T>) {
         self.vacuum_node(self.root, removed);
         removed.clear();
     }
 
-    /**
-    Recursively cleans up removed documents from the index.
-     * `T` Document key.
-     * `index` Index.
-     * `removed` Set of removed document ids.
-    */
+    /// Recursively cleans up removed documents from the index.
     fn vacuum_node(
         &mut self,
         node_index: ArenaIndex<InvertedIndexNode<T>>,
@@ -264,13 +240,8 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
         ret
     }
 
-    /**
-    Cleans up removed documents from a node, and returns the document frequency
-     * `T` Document key.
-     * `node_index` Index of the node
-     * `index` Index.
-     * `removed` Set of removed document ids.
-    */
+    /// Cleans up removed documents from a node, and returns
+    /// the document frequency.
     pub(crate) fn disconnect_and_count_documents(
         &mut self,
         node_index: ArenaIndex<InvertedIndexNode<T>>,
@@ -307,13 +278,7 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
         document_frequency
     }
 
-    /**
-    Finds inverted index node that matches the `term`.
-     * typeparam `T` Document key.
-     * `node` Root node.
-     * `term` Term.
-    returns Inverted index node that contains `term` or an `undefined` value.
-     */
+    /// Finds inverted index node that matches the `term`.
     pub(crate) fn find_inverted_index_node(
         node: ArenaIndex<InvertedIndexNode<T>>,
         term: &str,
@@ -334,13 +299,7 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
         node_iteration
     }
 
-    /**
-    Finds inverted index child node with matching `char`.
-     * typeparam `T` Document key.
-     * `node` InvertedIndexNode.
-     * `charCode` Char code.
-    returns Matching InvertedIndexNode or `undefined`.
-     */
+    /// Finds inverted index child node with matching `char`.
     pub(crate) fn find_inverted_index_node_child_nodes_by_char(
         from_node: &InvertedIndexNode<T>,
         char: &char,
@@ -360,65 +319,38 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
     }
 }
 
-/**
-Document Details object stores additional information about documents.
- * typeparam `T` Document key.
- */
-
+/// Document Details object stores additional information about documents.
 #[derive(Debug, PartialEq, Eq)]
 pub struct DocumentDetails<T> {
-    /**
-    Document key. It can be a simple unique ID or a direct reference to original document.
-     */
+    /// Document key can be a simple unique ID or a direct
+    /// reference to original document.
     pub key: T,
-    /**
-    Field lengths is an array that contains number of terms in each indexed text field.
-     */
+    /// Field lengths is an array that contains number
+    /// of terms in each indexed text field.
     pub field_length: Vec<usize>,
 }
 
-/**
-Document pointer contains information about term frequency for a document.
-* typeparam `T` Document key.
-*/
+/// Document pointer contains information about term frequency for a document.
 #[derive(Debug)]
 
 pub struct DocumentPointer<T> {
-    /**
-    Next DocumentPointer in the intrusive linked list.
-     */
+    /// Next DocumentPointer in the intrusive linked list.
     pub next: Option<ArenaIndex<DocumentPointer<T>>>,
-    /**
-    Reference to a DocumentDetailsobject that is used for this document.
-     */
+    /// Reference to a DocumentDetailsobject that is used for this document.
     pub details_key: T,
-    /**
-    Term frequency in each field.
-     */
+    /// Term frequency in each field.
     pub term_frequency: Vec<usize>,
 }
 
-/**
-Inverted Index Node.
-Inverted index is implemented with a [trie](https://en.wikipedia.org/wiki/Trie) data structure.
- * typeparam `T` Document key.
-*/
+/// Inverted index is implemented with a [trie](https://en.wikipedia.org/wiki/Trie) data structure.
 pub struct InvertedIndexNode<T> {
-    /**
-    Char code is used to store keys in the trie data structure.
-     */
+    /// Char code is used to store keys in the trie data structure.
     pub char: char,
-    /**
-    Next InvertedIndexNode in the intrusive linked list.
-     */
+    /// Next InvertedIndexNode in the intrusive linked list.
     pub next: Option<ArenaIndex<InvertedIndexNode<T>>>,
-    /**
-    Linked list of children {@link InvertedIndexNode}.
-     */
+    /// Linked list of children {@link InvertedIndexNode}.
     pub first_child: Option<ArenaIndex<InvertedIndexNode<T>>>,
-    /**
-    Linked list of documents associated with this node.
-     */
+    /// Linked list of documents associated with this node.
     pub first_doc: Option<ArenaIndex<DocumentPointer<T>>>,
 }
 
@@ -436,27 +368,16 @@ impl<T> Debug for InvertedIndexNode<T> {
     }
 }
 
-/**
-Field Details contains additional information about fields.
- */
+/// Field Details contains additional information about fields.
 #[derive(Clone, Debug, PartialEq)]
 pub struct FieldDetails {
-    /**
-    Sum of field lengths in all documents.
-     */
+    /// Sum of field lengths in all documents.
     pub sum: usize,
-    /**
-    Average of field lengths in all documents.
-     */
+    /// Average of field lengths in all documents.
     pub avg: f64,
 }
 
-/**
-Creates inverted index node.
- * typeparam `T` Document key.
- * `charCode` Char code.
- returns InvertedIndexNode instance.
- */
+/// Creates inverted index node.
 fn create_inverted_index_node<T>(char: &char) -> InvertedIndexNode<T> {
     InvertedIndexNode {
         char: char.to_owned(),
@@ -466,12 +387,7 @@ fn create_inverted_index_node<T>(char: &char) -> InvertedIndexNode<T> {
     }
 }
 
-/**
-Adds inverted index child node.
- * typeparam `T` Document key.
- * `parent` Parent node.
- * `child` Child node to add.
- */
+/// Adds inverted index child node.
 fn add_inverted_index_child_node<T: Clone>(
     parent_index: ArenaIndex<InvertedIndexNode<T>>,
     child: ArenaIndex<InvertedIndexNode<T>>,
@@ -484,18 +400,7 @@ fn add_inverted_index_child_node<T: Clone>(
     index_arena.get_mut(parent_index).unwrap().first_child = Some(child);
 }
 
-/**
-Adds a document to the index.
-
-typeparam `T` Document key.
-typeparam `D` Document type.
- * index {@link Index}.
- * fieldAccessors Field accessors.
- * `tokenizer` Tokenizer is a function that breaks a text into words, phrases, symbols, or other meaningful elements called tokens.
- * `filter` Filter is a function that processes tokens and returns terms, terms are used in Inverted Index to index documents.
- * `key` Document key.
- * `doc` Document.
- */
+/// Adds a document to the index.
 fn add_inverted_index_doc<T: Clone>(
     node: &mut InvertedIndexNode<T>,
     mut doc: DocumentPointer<T>,
@@ -509,14 +414,8 @@ fn add_inverted_index_doc<T: Clone>(
     node_value.first_doc = Some(doc_index);
 }
 
-/**
-Creates inverted index nodes for the `term` starting from the `start` character.
- * typeparam `T` Document key.
- * `parent` Parent node.
- * `term` Term.
- * `start` First char code position in the `term`.
- * returns leaf InvertedIndexNode.
- */
+/// Creates inverted index nodes for the `term` starting
+/// from the `start` character.
 fn create_inverted_index_nodes<T: Clone>(
     arena_index: &mut StandardArena<InvertedIndexNode<T>>,
     mut parent: ArenaIndex<InvertedIndexNode<T>>,
@@ -526,7 +425,7 @@ fn create_inverted_index_nodes<T: Clone>(
     for char in term.chars().skip(start.to_owned()) {
         let new_node = arena_index.insert(create_inverted_index_node(&char));
         let new_parent = {
-            add_inverted_index_child_node(parent, new_node, arena_index); // unsafe { .get().as_mut().unwrap() }
+            add_inverted_index_child_node(parent, new_node, arena_index);
             arena_index.get(parent).unwrap().first_child
         };
         parent = new_parent.unwrap();
@@ -539,10 +438,10 @@ mod tests {
 
     use super::*;
 
-    /**
-        Count the amount of nodes of the index.
-        returns the amount, including root node. Which means count will alway be greater than 0
-    */
+    /// Count the amount of nodes of the index.
+    ///
+    /// Returns the amount, including root node
+    /// which means count will alway be greater than 0.
     fn count_nodes<T>(idx: &Index<T>) -> i32 {
         fn count_nodes_recursively<T>(
             idx: &Index<T>,

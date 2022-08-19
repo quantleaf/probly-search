@@ -133,6 +133,40 @@ impl<T: Eq + Hash + Copy> Index<T> {
             )
         }
     }
+
+    /**
+     * Remove document from the index.
+
+     * typeparam `T` Document key.
+     * `index` Index.
+     * `removed` Set of removed document ids.
+     * `key` Document key.
+    */
+    pub fn remove_document(&mut self, removed: &mut HashSet<T>, key: T) {
+        let fields = &mut self.fields;
+        let doc_details_option = self.docs.get(&key);
+        let mut remove_key = false;
+        if let Some(doc_details) = doc_details_option {
+            removed.insert((&key).to_owned());
+            let details = doc_details;
+            remove_key = true;
+            let new_len = (self.docs.len() - 1) as f64;
+            for i in 0..fields.len() {
+                let field_length = &details.field_length[i];
+                if field_length > &0 {
+                    let field = fields.get_mut(i);
+                    if let Some(f) = field {
+                        f.sum -= *field_length;
+                        f.avg = f.sum as f64 / new_len;
+                    }
+                }
+            }
+        }
+
+        if remove_key {
+            self.docs.remove(&key);
+        }
+    }
 }
 /**
 Creates an Index.
@@ -394,44 +428,6 @@ fn create_inverted_index_nodes<T: Clone>(
         parent = new_parent.unwrap();
     }
     parent
-}
-
-/**
- * Remove document from the index.
-
- * typeparam `T` Document key.
- * `index` Index.
- * `removed` Set of removed document ids.
- * `key` Document key.
-*/
-pub fn remove_document_from_index<T: Hash + Eq + Copy>(
-    index: &mut Index<T>,
-    removed: &mut HashSet<T>,
-    key: T,
-) {
-    let fields = &mut index.fields;
-    let doc_details_option = index.docs.get(&key);
-    let mut remove_key = false;
-    if let Some(doc_details) = doc_details_option {
-        removed.insert((&key).to_owned());
-        let details = doc_details;
-        remove_key = true;
-        let new_len = (index.docs.len() - 1) as f64;
-        for i in 0..fields.len() {
-            let field_length = &details.field_length[i];
-            if field_length > &0 {
-                let field = fields.get_mut(i);
-                if let Some(f) = field {
-                    f.sum -= *field_length;
-                    f.avg = f.sum as f64 / new_len;
-                }
-            }
-        }
-    }
-
-    if remove_key {
-        index.docs.remove(&key);
-    }
 }
 
 /**
@@ -729,7 +725,7 @@ mod tests {
                 index.add_document(&[field_accessor], tokenizer, filter, doc.id, &doc)
             }
 
-            remove_document_from_index(&mut index, &mut removed, 1);
+            index.remove_document(&mut removed, 1);
             vacuum_index(&mut index, &mut removed);
 
             assert_eq!(index.docs.len(), 0);

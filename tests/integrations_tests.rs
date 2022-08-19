@@ -1,7 +1,7 @@
 use std::{collections::HashSet, sync::Mutex};
 
 use probly_search::{
-    index::{create_index, remove_document_from_index, vacuum_index, Index},
+    index::{create_index, vacuum_index, Index},
     query::{
         query,
         score::default::{bm25, zero_to_one},
@@ -93,7 +93,7 @@ pub fn test_add_query_delete_bm25() {
 
     // Remove documents from index
     let mut removed_docs = HashSet::new();
-    remove_document_from_index(&mut index, &mut removed_docs, doc_1.id);
+    index.remove_document(&mut removed_docs, doc_1.id);
 
     // Vacuum to remove completely
     vacuum_index(&mut index, &mut removed_docs);
@@ -171,7 +171,7 @@ pub fn test_add_query_delete_zero_to_one() {
     );
 
     let mut removed_docs = HashSet::new();
-    remove_document_from_index(&mut index, &mut removed_docs, doc_1.id);
+    index.remove_document(&mut removed_docs, doc_1.id);
 
     // Search, expect 1 result
     result = query(

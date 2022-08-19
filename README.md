@@ -40,7 +40,7 @@ See [recipe search demo project](https://github.com/quantleaf/probly-search-demo
 ```rust
 use std::collections::HashSet;
 use probly_search::{
-    index::{create_index, remove_document_from_index, Index},
+    index::{create_index, Index},
     query::{
         query,
         score::default::{bm25, zero_to_one},
@@ -131,7 +131,7 @@ assert_eq!(
 
 // Remove documents from index
 let mut removed_docs = HashSet::new();
-remove_document_from_index(&mut index, &mut removed_docs, doc_1.id);
+index.remove_document(&mut removed_docs, doc_1.id);
 
 // Vacuum to remove completely
 vacuum_index(&mut index, &mut removed_docs);

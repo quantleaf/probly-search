@@ -167,6 +167,18 @@ impl<T: Eq + Hash + Copy> Index<T> {
             self.docs.remove(&key);
         }
     }
+
+    /**
+    Cleans up removed documents from the {@link Index}.
+    Recursively cleans up removed documents from the index.
+     * `T` Document key.
+     * `index` Index.
+     * `removed` Set of removed document ids.
+    */
+    pub fn vacuum(&mut self, removed: &mut HashSet<T>) {
+        vacuum_node(self, self.root, removed);
+        removed.clear();
+    }
 }
 /**
 Creates an Index.
@@ -428,18 +440,6 @@ fn create_inverted_index_nodes<T: Clone>(
         parent = new_parent.unwrap();
     }
     parent
-}
-
-/**
-Cleans up removed documents from the {@link Index}.
-Recursively cleans up removed documents from the index.
- * `T` Document key.
- * `index` Index.
- * `removed` Set of removed document ids.
-*/
-pub fn vacuum_index<T: Hash + Eq>(index: &mut Index<T>, removed: &mut HashSet<T>) {
-    vacuum_node(index, index.root, removed);
-    removed.clear();
 }
 
 /**
@@ -726,7 +726,7 @@ mod tests {
             }
 
             index.remove_document(&mut removed, 1);
-            vacuum_index(&mut index, &mut removed);
+            index.vacuum(&mut removed);
 
             assert_eq!(index.docs.len(), 0);
             assert_eq!(index.fields.len(), 1);

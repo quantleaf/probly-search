@@ -134,7 +134,7 @@ let mut removed_docs = HashSet::new();
 index.remove_document(&mut removed_docs, doc_1.id);
 
 // Vacuum to remove completely
-vacuum_index(&mut index, &mut removed_docs);
+index.vacuum(&mut removed_docs);
 
 // Search, expect 1 result
 result = query(

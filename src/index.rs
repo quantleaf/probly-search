@@ -642,32 +642,32 @@ fn create_inverted_index_nodes<T: Clone>(
     parent
 }
 
-/**
-    Count the amount of nodes of the index.
-    returns the amount, including root node. Which means count will alway be greater than 0
-*/
-fn count_nodes<T>(idx: &Index<T>) -> i32 {
-    fn count_nodes_recursively<T>(
-        idx: &Index<T>,
-        node_index: ArenaIndex<InvertedIndexNode<T>>,
-    ) -> i32 {
-        let mut count = 1;
-        let node = idx.arena_index.get(node_index).unwrap();
-        if let Some(first) = node.first_child {
-            count += count_nodes_recursively(idx, first);
-        }
-        if let Some(next) = node.next {
-            count += count_nodes_recursively(idx, next);
-        }
-        count
-    }
-    count_nodes_recursively(idx, idx.root)
-}
-
 #[cfg(test)]
 mod tests {
 
     use super::*;
+
+    /**
+        Count the amount of nodes of the index.
+        returns the amount, including root node. Which means count will alway be greater than 0
+    */
+    fn count_nodes<T>(idx: &Index<T>) -> i32 {
+        fn count_nodes_recursively<T>(
+            idx: &Index<T>,
+            node_index: ArenaIndex<InvertedIndexNode<T>>,
+        ) -> i32 {
+            let mut count = 1;
+            let node = idx.arena_index.get(node_index).unwrap();
+            if let Some(first) = node.first_child {
+                count += count_nodes_recursively(idx, first);
+            }
+            if let Some(next) = node.next {
+                count += count_nodes_recursively(idx, next);
+            }
+            count
+        }
+        count_nodes_recursively(idx, idx.root)
+    }
 
     #[derive(Clone)]
     struct Doc {

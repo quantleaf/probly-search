@@ -6,11 +6,8 @@ use crate::index::*;
 use std::fmt::Debug;
 
 extern crate typed_generational_arena;
-/**
- * Query Result.
 
- * `T` Document key.
-*/
+/// Result type for querying an index.
 #[derive(Debug, PartialEq)]
 pub struct QueryResult<T> {
     /**
@@ -23,7 +20,7 @@ pub struct QueryResult<T> {
     pub score: f64,
 }
 
-pub fn max_score_merger(
+pub(crate) fn max_score_merger(
     score: &f64,
     previous_score: Option<&f64>,
     document_visited_for_term: bool,

@@ -1,6 +1,9 @@
-pub mod index;
-pub mod query;
-pub mod utils;
+mod index;
+mod query;
+mod utils;
+
+pub use index::*;
+pub use query::*;
 
 #[cfg(test)]
 pub mod test_util {

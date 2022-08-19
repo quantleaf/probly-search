@@ -529,7 +529,7 @@ Finds inverted index node that matches the `term`.
  * `term` Term.
 returns Inverted index node that contains `term` or an `undefined` value.
  */
-pub fn find_inverted_index_node<T>(
+pub(crate) fn find_inverted_index_node<T>(
     node: ArenaIndex<InvertedIndexNode<T>>,
     term: &str,
     index_arena: &StandardArena<InvertedIndexNode<T>>,
@@ -646,7 +646,7 @@ fn create_inverted_index_nodes<T: Clone>(
     Count the amount of nodes of the index.
     returns the amount, including root node. Which means count will alway be greater than 0
 */
-pub fn count_nodes<T>(idx: &Index<T>) -> i32 {
+fn count_nodes<T>(idx: &Index<T>) -> i32 {
     fn count_nodes_recursively<T>(
         idx: &Index<T>,
         node_index: ArenaIndex<InvertedIndexNode<T>>,

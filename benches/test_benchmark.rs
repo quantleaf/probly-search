@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use probly_search::index::Index;
+use probly_search::Index;
 
 criterion_group!(benches, test_speed);
 criterion_main!(benches);

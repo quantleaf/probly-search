@@ -1,11 +1,9 @@
 use std::{collections::HashSet, sync::Mutex};
 
 use probly_search::{
-    index::Index,
-    query::{
-        score::default::{bm25, zero_to_one},
-        QueryResult,
-    },
+    Index,
+    score::default::{bm25, zero_to_one},
+    QueryResult,
 };
 
 #[derive(Clone)]

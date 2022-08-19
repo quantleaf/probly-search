@@ -73,7 +73,10 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
     filter: Filter,
     fields_boost: &[f64],
     removed: Option<&HashSet<T>>,
-) -> Vec<QueryResult<T>> {
+) -> Vec<QueryResult<T>>
+where
+    T: Copy,
+{
     let query_terms = tokenizer(query);
     let mut scores: HashMap<T, f64> = HashMap::new();
     for (query_term_index, query_term_pre_filter) in query_terms.iter().enumerate() {
@@ -86,7 +89,7 @@ pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
                     find_inverted_index_node(index.root, &query_term_expanded, &index.arena_index);
                 if let Some(term_node_index) = term_node_option {
                     let document_frequency =
-                        disconnect_and_count_documents(index, term_node_index, removed);
+                        index.disconnect_and_count_documents(term_node_index, removed);
                     let term_node = index.arena_index.get(term_node_index).unwrap();
                     if let Some(term_node_option_first_doc) = term_node.first_doc {
                         if document_frequency > 0 {

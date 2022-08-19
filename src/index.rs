@@ -217,8 +217,6 @@ impl<T: Eq + Hash + Copy> Index<T> {
         removed.clear();
     }
 
-//<T: Hash + Eq>
-
     /**
     Recursively cleans up removed documents from the index.
      * `T` Document key.
@@ -230,7 +228,7 @@ impl<T: Eq + Hash + Copy> Index<T> {
         node_index: ArenaIndex<InvertedIndexNode<T>>,
         removed: &HashSet<T>,
     ) -> usize {
-        disconnect_and_count_documents(self, node_index, Some(removed));
+        self.disconnect_and_count_documents(node_index, Some(removed));
         let mut prev_child: Option<ArenaIndex<InvertedIndexNode<T>>> = None;
         let mut ret = 0;
         let node = self.arena_index.get(node_index).unwrap();
@@ -266,6 +264,48 @@ impl<T: Eq + Hash + Copy> Index<T> {
         ret
     }
 
+    /**
+    Cleans up removed documents from a node, and returns the document frequency
+     * `T` Document key.
+     * `node_index` Index of the node
+     * `index` Index.
+     * `removed` Set of removed document ids.
+    */
+    pub(crate) fn disconnect_and_count_documents(
+        &mut self,
+        node_index: ArenaIndex<InvertedIndexNode<T>>,
+        removed: Option<&HashSet<T>>,
+    ) -> usize {
+        let node = self.arena_index.get_mut(node_index).unwrap();
+        let mut prev_pointer: Option<ArenaIndex<DocumentPointer<T>>> = None;
+        let mut pointer_option = node.first_doc;
+        let mut document_frequency = 0;
+        while let Some(pointer) = pointer_option {
+            let is_removed = removed.is_some()
+                && removed
+                    .unwrap()
+                    .contains(&self.arena_doc.get(pointer).unwrap().details_key);
+            if is_removed {
+                match &prev_pointer {
+                    None => {
+                        node.first_doc = self.arena_doc.get(pointer).unwrap().next;
+                    }
+                    Some(prev) => {
+                        self.arena_doc.get_mut(*prev).unwrap().next =
+                            self.arena_doc.get(pointer).unwrap().next;
+                    }
+                }
+            } else {
+                document_frequency += 1;
+                prev_pointer = Some(pointer);
+            }
+            pointer_option = self.arena_doc.get(pointer).unwrap().next;
+            if is_removed {
+                self.arena_doc.remove(pointer);
+            }
+        }
+        document_frequency
+    }
 }
 
 /**
@@ -492,49 +532,6 @@ fn create_inverted_index_nodes<T: Clone>(
         parent = new_parent.unwrap();
     }
     parent
-}
-
-/**
-Cleans up removed documents from a node, and returns the document frequency
- * `T` Document key.
- * `node_index` Index of the node
- * `index` Index.
- * `removed` Set of removed document ids.
-*/
-pub fn disconnect_and_count_documents<T: Hash + Eq>(
-    index: &mut Index<T>,
-    node_index: ArenaIndex<InvertedIndexNode<T>>,
-    removed: Option<&HashSet<T>>,
-) -> usize {
-    let node = index.arena_index.get_mut(node_index).unwrap();
-    let mut prev_pointer: Option<ArenaIndex<DocumentPointer<T>>> = None;
-    let mut pointer_option = node.first_doc;
-    let mut document_frequency = 0;
-    while let Some(pointer) = pointer_option {
-        let is_removed = removed.is_some()
-            && removed
-                .unwrap()
-                .contains(&index.arena_doc.get(pointer).unwrap().details_key);
-        if is_removed {
-            match &prev_pointer {
-                None => {
-                    node.first_doc = index.arena_doc.get(pointer).unwrap().next;
-                }
-                Some(prev) => {
-                    index.arena_doc.get_mut(*prev).unwrap().next =
-                        index.arena_doc.get(pointer).unwrap().next;
-                }
-            }
-        } else {
-            document_frequency += 1;
-            prev_pointer = Some(pointer);
-        }
-        pointer_option = index.arena_doc.get(pointer).unwrap().next;
-        if is_removed {
-            index.arena_doc.remove(pointer);
-        }
-    }
-    document_frequency
 }
 
 /**

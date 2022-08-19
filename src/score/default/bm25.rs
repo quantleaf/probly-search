@@ -6,7 +6,7 @@ use std::{collections::HashMap, fmt::Debug};
 
 use crate::{
     index::{DocumentDetails, DocumentPointer, InvertedIndexNode},
-    query::score::calculator::{FieldData, ScoreCalculator, TermData},
+    score::calculator::{FieldData, ScoreCalculator, TermData},
 };
 use typed_generational_arena::StandardIndex as ArenaIndex;
 
@@ -100,8 +100,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        query::QueryResult,
         test_util::{build_test_index, test_score},
+        QueryResult,
     };
     #[test]
     fn it_should_return_doc_1() {

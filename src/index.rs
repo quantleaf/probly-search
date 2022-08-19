@@ -5,10 +5,7 @@ use std::{
     usize,
 };
 
-use crate::{
-    query::{score::calculator::*, *},
-    utils::{FieldAccessor, Filter, Tokenizer},
-};
+use crate::{score::*, FieldAccessor, Filter, Tokenizer};
 extern crate typed_generational_arena;
 use typed_generational_arena::StandardArena;
 use typed_generational_arena::StandardIndex as ArenaIndex;
@@ -640,6 +637,89 @@ fn create_inverted_index_nodes<T: Clone>(
         parent = new_parent.unwrap();
     }
     parent
+}
+
+/// Result type for querying an index.
+#[derive(Debug, PartialEq)]
+pub struct QueryResult<T> {
+    /**
+     * Document key.
+     */
+    pub key: T,
+    /**
+     * Result score.
+     */
+    pub score: f64,
+}
+
+pub(crate) fn max_score_merger(
+    score: &f64,
+    previous_score: Option<&f64>,
+    document_visited_for_term: bool,
+) -> f64 {
+    {
+        if let Some(p) = previous_score {
+            if document_visited_for_term {
+                f64::max(p.to_owned(), score.to_owned())
+            } else {
+                p + score
+            }
+        } else {
+            score.to_owned()
+        }
+    }
+}
+
+/**
+Expands term with all possible combinations.
+ * `index`
+ * `term` Term.
+returns All terms that starts with `term` string.
+ */
+pub(crate) fn expand_term<I: Debug>(
+    index: &Index<I>,
+    term: &str,
+    arena_index: &StandardArena<InvertedIndexNode<I>>,
+) -> Vec<String> {
+    let node = find_inverted_index_node(index.root, term, &index.arena_index);
+    let mut results = Vec::new();
+    if let Some(n) = node {
+        expand_term_from_node(
+            index.arena_index.get(n).unwrap(),
+            &mut results,
+            term,
+            arena_index,
+        );
+    }
+
+    results
+}
+
+/**
+Recursively goes through inverted index nodes and expands term with all possible combinations.
+
+ * typeparam `I` Document ID type.
+ * `index {@link Index}
+ * `results Results.
+ * `term Term.
+ */
+fn expand_term_from_node<I: Debug>(
+    node: &InvertedIndexNode<I>,
+    results: &mut Vec<String>,
+    term: &str,
+    arena_index: &StandardArena<InvertedIndexNode<I>>,
+) {
+    if node.first_doc.is_some() {
+        results.push(term.to_owned());
+    }
+    let mut child = node.first_child;
+    while let Some(child_index) = child {
+        let cb = arena_index.get(child_index).unwrap();
+        let mut inter = term.to_owned();
+        inter.push(cb.char);
+        expand_term_from_node(cb, results, &inter, arena_index); // String.fromCharCode(child.charCode)
+        child = cb.next;
+    }
 }
 
 #[cfg(test)]

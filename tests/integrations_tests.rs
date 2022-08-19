@@ -1,7 +1,7 @@
 use std::{collections::HashSet, sync::Mutex};
 
 use probly_search::{
-    score::default::{bm25, zero_to_one},
+    score::{bm25, zero_to_one},
     Index, QueryResult,
 };
 

@@ -14,11 +14,8 @@ use std::{
 };
 
 use crate::{
-    index::{DocumentDetails, DocumentPointer, InvertedIndexNode},
-    query::{
-        score::calculator::{FieldData, ScoreCalculator, TermData},
-        QueryResult,
-    },
+    index::{DocumentDetails, DocumentPointer, InvertedIndexNode, QueryResult},
+    score::calculator::{FieldData, ScoreCalculator, TermData},
 };
 
 use typed_generational_arena::StandardIndex as ArenaIndex;
@@ -134,8 +131,7 @@ mod tests {
     use super::*;
     use crate::{
         index::Index,
-        query::tests::{filter, tokenizer},
-        test_util::{build_test_index, test_score},
+        test_util::{build_test_index, filter, test_score, tokenizer},
     };
 
     #[test]

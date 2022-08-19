@@ -1,35 +1,53 @@
 mod index;
-mod query;
-mod utils;
+pub mod score;
 
 pub use index::*;
-pub use query::*;
+
+/// Type for functions that extract a field value from a document.
+pub type FieldAccessor<D> = fn(&D) -> Option<&str>;
+
+/// Type used to tokenize a field.
+pub type Tokenizer = fn(&str) -> Vec<&str>;
+
+/// Type used to filter fields.
+pub type Filter = fn(&str) -> &str;
+
+#[cfg(test)]
+mod query;
 
 #[cfg(test)]
 pub mod test_util {
 
     use crate::{
-        index::Index,
-        query::{score::calculator::ScoreCalculator, QueryResult},
+        index::{Index, QueryResult},
+        score::ScoreCalculator,
     };
+
     fn approx_equal(a: f64, b: f64, dp: u8) -> bool {
         let p: f64 = 10f64.powf(-(dp as f64));
 
         (a - b).abs() < p
     }
 
-    struct Doc {
-        id: usize,
-        title: String,
+    pub struct Doc {
+        pub id: usize,
+        pub title: String,
+        pub text: String,
     }
-    fn tokenizer(s: &str) -> Vec<&str> {
-        s.split(' ').collect::<Vec<_>>()
-    }
-    fn title_extract(d: &Doc) -> Option<&str> {
+
+    pub fn title_extract(d: &Doc) -> Option<&str> {
         Some(d.title.as_str())
     }
 
-    fn filter(s: &str) -> &str {
+    pub fn text_extract(d: &Doc) -> Option<&str> {
+        Some(d.text.as_str())
+    }
+
+    pub fn tokenizer(s: &str) -> Vec<&str> {
+        s.split(' ').collect::<Vec<_>>()
+    }
+
+    pub fn filter(s: &str) -> &str {
         s
     }
 
@@ -72,6 +90,7 @@ pub mod test_util {
             let doc = Doc {
                 id: i,
                 title: title.to_string(),
+                text: String::new(),
             };
             index.add_document(&[title_extract], tokenizer, filter, doc.id, &doc);
         }

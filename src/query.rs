@@ -1,97 +1,8 @@
-pub mod score;
-
-use typed_generational_arena::StandardArena;
-
-use crate::index::*;
-use std::fmt::Debug;
-
-extern crate typed_generational_arena;
-
-/// Result type for querying an index.
-#[derive(Debug, PartialEq)]
-pub struct QueryResult<T> {
-    /**
-     * Document key.
-     */
-    pub key: T,
-    /**
-     * Result score.
-     */
-    pub score: f64,
-}
-
-pub(crate) fn max_score_merger(
-    score: &f64,
-    previous_score: Option<&f64>,
-    document_visited_for_term: bool,
-) -> f64 {
-    {
-        if let Some(p) = previous_score {
-            if document_visited_for_term {
-                f64::max(p.to_owned(), score.to_owned())
-            } else {
-                p + score
-            }
-        } else {
-            score.to_owned()
-        }
-    }
-}
-
-/**
-Expands term with all possible combinations.
- * `index`
- * `term` Term.
-returns All terms that starts with `term` string.
- */
-pub(crate) fn expand_term<I: Debug>(
-    index: &Index<I>,
-    term: &str,
-    arena_index: &StandardArena<InvertedIndexNode<I>>,
-) -> Vec<String> {
-    let node = find_inverted_index_node(index.root, term, &index.arena_index);
-    let mut results = Vec::new();
-    if let Some(n) = node {
-        expand_term_from_node(
-            index.arena_index.get(n).unwrap(),
-            &mut results,
-            term,
-            arena_index,
-        );
-    }
-
-    results
-}
-
-/**
-Recursively goes through inverted index nodes and expands term with all possible combinations.
-
- * typeparam `I` Document ID type.
- * `index {@link Index}
- * `results Results.
- * `term Term.
- */
-fn expand_term_from_node<I: Debug>(
-    node: &InvertedIndexNode<I>,
-    results: &mut Vec<String>,
-    term: &str,
-    arena_index: &StandardArena<InvertedIndexNode<I>>,
-) {
-    if node.first_doc.is_some() {
-        results.push(term.to_owned());
-    }
-    let mut child = node.first_child;
-    while let Some(child_index) = child {
-        let cb = arena_index.get(child_index).unwrap();
-        let mut inter = term.to_owned();
-        inter.push(cb.char);
-        expand_term_from_node(cb, results, &inter, arena_index); // String.fromCharCode(child.charCode)
-        child = cb.next;
-    }
-}
-
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
+    use crate::{index::expand_term, Index};
+
+    use crate::test_util::*;
 
     fn approx_equal(a: f64, b: f64, dp: u8) -> bool {
         let p: f64 = 10f64.powf(-(dp as f64));
@@ -99,27 +10,11 @@ mod tests {
         (a - b).abs() < p
     }
 
-    use super::*;
-    struct Doc {
-        id: usize,
-        title: String,
-        text: String,
-    }
-
-    fn title_extract(d: &Doc) -> Option<&str> {
-        Some(d.title.as_str())
-    }
-    fn text_extract(d: &Doc) -> Option<&str> {
-        Some(d.text.as_str())
-    }
-
-    pub fn tokenizer(s: &str) -> Vec<&str> {
-        s.split(' ').collect::<Vec<_>>()
-    }
-
-    pub fn filter(s: &str) -> &str {
-        s
-    }
+    //struct Doc {
+    //id: usize,
+    //title: String,
+    //text: String,
+    //}
 
     pub mod query {
         use super::*;
@@ -150,7 +45,7 @@ mod tests {
             }
             let result = index.query(
                 &"a".to_string(),
-                &mut crate::query::score::default::bm25::new(),
+                &mut crate::score::bm25::new(),
                 tokenizer,
                 filter,
                 &[1., 1.],
@@ -192,7 +87,7 @@ mod tests {
 
             let result = index.query(
                 &"c".to_string(),
-                &mut crate::query::score::default::bm25::new(),
+                &mut crate::score::bm25::new(),
                 tokenizer,
                 filter,
                 &[1., 1.],
@@ -246,7 +141,7 @@ mod tests {
 
             let result = index.query(
                 &"h".to_string(),
-                &mut crate::query::score::default::bm25::new(),
+                &mut crate::score::bm25::new(),
                 tokenizer,
                 filter,
                 &[1., 1.],
@@ -294,7 +189,7 @@ mod tests {
             }
             let result = index.query(
                 &"a".to_string(),
-                &mut crate::query::score::default::bm25::new(),
+                &mut crate::score::bm25::new(),
                 tokenizer,
                 custom_filter,
                 &[1., 1.],
@@ -331,7 +226,7 @@ mod tests {
 
             let result = index.query(
                 &"a d".to_string(),
-                &mut crate::query::score::default::bm25::new(),
+                &mut crate::score::bm25::new(),
                 tokenizer,
                 filter,
                 &[1., 1.],

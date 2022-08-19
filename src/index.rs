@@ -5,7 +5,10 @@ use std::{
     usize,
 };
 
-use crate::utils::{FieldAccessor, Filter, Tokenizer};
+use crate::{
+    query::{score::calculator::*, *},
+    utils::{FieldAccessor, Filter, Tokenizer},
+};
 extern crate typed_generational_arena;
 use typed_generational_arena::StandardArena;
 use typed_generational_arena::StandardIndex as ArenaIndex;
@@ -31,7 +34,7 @@ pub struct Index<T> {
     pub arena_doc: StandardArena<DocumentPointer<T>>,
 }
 
-impl<T: Eq + Hash + Copy> Index<T> {
+impl<T: Eq + Hash + Copy + Debug> Index<T> {
     /**
     Creates an Index.
      * typeparam `T` Document key.
@@ -305,6 +308,111 @@ impl<T: Eq + Hash + Copy> Index<T> {
             }
         }
         document_frequency
+    }
+
+    /**
+    Performs a search with a simple free text query.
+    All token separators work as a disjunction operator.
+    Arguments
+     * typeparam `T` Document key.
+     * `index`.
+     * `query` Query string.
+     * `score_calculator` A struct that implements the ScoreCalculator trait to provide score calculations.
+     * `tokenizer Tokenizer is a function that breaks a text into words, phrases, symbols, or other meaningful elements called tokens.
+     * `filter` Filter is a function that processes tokens and returns terms, terms are used in Inverted Index to index documents.
+     * `fields_boost` Fields boost factors.
+     * `remove`d Set of removed document keys.
+
+    returns Array of QueryResult structs
+    */
+    pub fn query<M, S: ScoreCalculator<T, M>>(
+        &mut self,
+        query: &str,
+        score_calculator: &mut S,
+        tokenizer: Tokenizer,
+        filter: Filter,
+        fields_boost: &[f64],
+        removed: Option<&HashSet<T>>,
+    ) -> Vec<QueryResult<T>>
+    where
+        T: Copy,
+    {
+        let query_terms = tokenizer(query);
+        let mut scores: HashMap<T, f64> = HashMap::new();
+        for (query_term_index, query_term_pre_filter) in query_terms.iter().enumerate() {
+            let query_term = filter(query_term_pre_filter);
+            if !query_term.is_empty() {
+                let expanded_terms = expand_term(self, query_term, &self.arena_index);
+                let mut visited_documents_for_term: HashSet<T> = HashSet::new();
+                for query_term_expanded in expanded_terms {
+                    let term_node_option = find_inverted_index_node(
+                        self.root,
+                        &query_term_expanded,
+                        &self.arena_index,
+                    );
+                    if let Some(term_node_index) = term_node_option {
+                        let document_frequency =
+                            self.disconnect_and_count_documents(term_node_index, removed);
+                        let term_node = self.arena_index.get(term_node_index).unwrap();
+                        if let Some(term_node_option_first_doc) = term_node.first_doc {
+                            if document_frequency > 0 {
+                                let term_expansion_data = TermData {
+                                    query_term_index,
+                                    all_query_terms: query_terms.clone(),
+                                    query_term,
+                                    query_term_expanded: &query_term_expanded,
+                                };
+                                let pre_calculations = &score_calculator.before_each(
+                                    &term_expansion_data,
+                                    document_frequency,
+                                    &self.docs,
+                                );
+
+                                let mut pointer = Some(term_node_option_first_doc);
+                                while let Some(p) = pointer {
+                                    let pointer_borrowed = self.arena_doc.get(p).unwrap();
+                                    let key = &pointer_borrowed.details_key;
+                                    if removed.is_none() || !removed.unwrap().contains(key) {
+                                        let fields = &self.fields;
+                                        let score = &score_calculator.score(
+                                            pre_calculations.as_ref(),
+                                            pointer_borrowed,
+                                            self.docs.get(key).unwrap(),
+                                            &term_node_index,
+                                            &FieldData {
+                                                fields_boost,
+                                                fields,
+                                            },
+                                            &term_expansion_data,
+                                        );
+                                        if let Some(s) = score {
+                                            let new_score = max_score_merger(
+                                                s,
+                                                scores.get(key),
+                                                visited_documents_for_term.contains(key),
+                                            );
+                                            scores.insert(key.to_owned(), new_score);
+                                        }
+                                    }
+                                    visited_documents_for_term.insert(key.to_owned());
+                                    pointer = pointer_borrowed.next;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut result: Vec<QueryResult<T>> = Vec::new();
+        for (key, score) in scores {
+            result.push(QueryResult { key, score });
+        }
+        score_calculator.finalize(&mut result);
+
+        result.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+
+        result
     }
 }
 

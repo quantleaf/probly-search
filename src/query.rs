@@ -2,18 +2,9 @@ pub mod score;
 
 use typed_generational_arena::StandardArena;
 
-use crate::{
-    index::*,
-    query::score::calculator::ScoreCalculator,
-    utils::{Filter, Tokenizer},
-};
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::Debug,
-    hash::Hash,
-};
+use crate::index::*;
+use std::fmt::Debug;
 
-use self::score::calculator::{FieldData, TermData};
 extern crate typed_generational_arena;
 /**
  * Query Result.
@@ -51,114 +42,12 @@ pub fn max_score_merger(
 }
 
 /**
-Performs a search with a simple free text query.
-All token separators work as a disjunction operator.
-Arguments
- * typeparam `T` Document key.
- * `index`.
- * `query` Query string.
- * `score_calculator` A struct that implements the ScoreCalculator trait to provide score calculations.
- * `tokenizer Tokenizer is a function that breaks a text into words, phrases, symbols, or other meaningful elements called tokens.
- * `filter` Filter is a function that processes tokens and returns terms, terms are used in Inverted Index to index documents.
- * `fields_boost` Fields boost factors.
- * `remove`d Set of removed document keys.
-
-returns Array of QueryResult structs
-*/
-pub fn query<T: Eq + Hash + Clone + Debug, M, S: ScoreCalculator<T, M>>(
-    index: &mut Index<T>,
-    query: &str,
-    score_calculator: &mut S,
-    tokenizer: Tokenizer,
-    filter: Filter,
-    fields_boost: &[f64],
-    removed: Option<&HashSet<T>>,
-) -> Vec<QueryResult<T>>
-where
-    T: Copy,
-{
-    let query_terms = tokenizer(query);
-    let mut scores: HashMap<T, f64> = HashMap::new();
-    for (query_term_index, query_term_pre_filter) in query_terms.iter().enumerate() {
-        let query_term = filter(query_term_pre_filter);
-        if !query_term.is_empty() {
-            let expanded_terms = expand_term(index, query_term, &index.arena_index);
-            let mut visited_documents_for_term: HashSet<T> = HashSet::new();
-            for query_term_expanded in expanded_terms {
-                let term_node_option =
-                    find_inverted_index_node(index.root, &query_term_expanded, &index.arena_index);
-                if let Some(term_node_index) = term_node_option {
-                    let document_frequency =
-                        index.disconnect_and_count_documents(term_node_index, removed);
-                    let term_node = index.arena_index.get(term_node_index).unwrap();
-                    if let Some(term_node_option_first_doc) = term_node.first_doc {
-                        if document_frequency > 0 {
-                            let term_expansion_data = TermData {
-                                query_term_index,
-                                all_query_terms: query_terms.clone(),
-                                query_term,
-                                query_term_expanded: &query_term_expanded,
-                            };
-                            let pre_calculations = &score_calculator.before_each(
-                                &term_expansion_data,
-                                document_frequency,
-                                &index.docs,
-                            );
-
-                            let mut pointer = Some(term_node_option_first_doc);
-                            while let Some(p) = pointer {
-                                let pointer_borrowed = index.arena_doc.get(p).unwrap();
-                                let key = &pointer_borrowed.details_key;
-                                if removed.is_none() || !removed.unwrap().contains(key) {
-                                    let fields = &index.fields;
-                                    let score = &score_calculator.score(
-                                        pre_calculations.as_ref(),
-                                        pointer_borrowed,
-                                        index.docs.get(key).unwrap(),
-                                        &term_node_index,
-                                        &FieldData {
-                                            fields_boost,
-                                            fields,
-                                        },
-                                        &term_expansion_data,
-                                    );
-                                    if let Some(s) = score {
-                                        let new_score = max_score_merger(
-                                            s,
-                                            scores.get(key),
-                                            visited_documents_for_term.contains(key),
-                                        );
-                                        scores.insert(key.to_owned(), new_score);
-                                    }
-                                }
-                                visited_documents_for_term.insert(key.to_owned());
-                                pointer = pointer_borrowed.next;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    let mut result: Vec<QueryResult<T>> = Vec::new();
-    for (key, score) in scores {
-        result.push(QueryResult { key, score });
-    }
-    score_calculator.finalize(&mut result);
-
-    result.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
-
-    result
-}
-
-/**
 Expands term with all possible combinations.
  * `index`
  * `term` Term.
 returns All terms that starts with `term` string.
  */
-fn expand_term<I: Debug>(
+pub(crate) fn expand_term<I: Debug>(
     index: &Index<I>,
     term: &str,
     arena_index: &StandardArena<InvertedIndexNode<I>>,
@@ -262,8 +151,7 @@ mod tests {
                     &doc,
                 );
             }
-            let result = query(
-                &mut index,
+            let result = index.query(
                 &"a".to_string(),
                 &mut crate::query::score::default::bm25::new(),
                 tokenizer,
@@ -305,8 +193,7 @@ mod tests {
                 );
             }
 
-            let result = query(
-                &mut index,
+            let result = index.query(
                 &"c".to_string(),
                 &mut crate::query::score::default::bm25::new(),
                 tokenizer,
@@ -360,8 +247,7 @@ mod tests {
                 );
             }
 
-            let result = query(
-                &mut index,
+            let result = index.query(
                 &"h".to_string(),
                 &mut crate::query::score::default::bm25::new(),
                 tokenizer,
@@ -409,8 +295,7 @@ mod tests {
                 }
                 filter(s)
             }
-            let result = query(
-                &mut index,
+            let result = index.query(
                 &"a".to_string(),
                 &mut crate::query::score::default::bm25::new(),
                 tokenizer,
@@ -447,8 +332,7 @@ mod tests {
                 );
             }
 
-            let result = query(
-                &mut index,
+            let result = index.query(
                 &"a d".to_string(),
                 &mut crate::query::score::default::bm25::new(),
                 tokenizer,

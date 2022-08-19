@@ -3,7 +3,6 @@ use std::{collections::HashSet, sync::Mutex};
 use probly_search::{
     index::Index,
     query::{
-        query,
         score::default::{bm25, zero_to_one},
         QueryResult,
     },
@@ -67,15 +66,7 @@ pub fn test_add_query_delete_bm25() {
     );
 
     // Search, expected 2 results
-    let mut result = query(
-        &mut index,
-        &"abc",
-        &mut bm25::new(),
-        tokenizer,
-        filter,
-        &[1., 1.],
-        None,
-    );
+    let mut result = index.query(&"abc", &mut bm25::new(), tokenizer, filter, &[1., 1.], None);
     assert_eq!(result.len(), 2);
     assert_eq!(
         result[0],
@@ -100,8 +91,7 @@ pub fn test_add_query_delete_bm25() {
     index.vacuum(&mut removed_docs);
 
     // Search, expect 1 result
-    result = query(
-        &mut index,
+    result = index.query(
         &"abc",
         &mut bm25::new(),
         tokenizer,
@@ -152,8 +142,7 @@ pub fn test_add_query_delete_zero_to_one() {
     );
 
     // Search, expected 2 results
-    let mut result = query(
-        &mut index,
+    let mut result = index.query(
         &"abc",
         &mut zero_to_one::new(),
         tokenizer,
@@ -175,8 +164,7 @@ pub fn test_add_query_delete_zero_to_one() {
     index.remove_document(&mut removed_docs, doc_1.id);
 
     // Search, expect 1 result
-    result = query(
-        &mut index,
+    result = index.query(
         &"abc",
         &mut zero_to_one::new(),
         tokenizer,

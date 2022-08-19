@@ -42,7 +42,6 @@ use std::collections::HashSet;
 use probly_search::{
     index::Index,
     query::{
-        query,
         score::default::{bm25, zero_to_one},
         QueryResult,
     },
@@ -104,8 +103,7 @@ index.add_document(
 );
 
 // Search, expected 2 results
-let mut result = query(
-    &mut index,
+let mut result = index.query(
     &"abc",
     &mut bm25::new(),
     tokenizer,
@@ -137,8 +135,7 @@ index.remove_document(&mut removed_docs, doc_1.id);
 index.vacuum(&mut removed_docs);
 
 // Search, expect 1 result
-result = query(
-    &mut index,
+result = index.query(
     &"abc",
     &mut bm25::new(),
     tokenizer,

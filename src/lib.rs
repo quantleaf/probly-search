@@ -7,7 +7,7 @@ pub mod test_util {
 
     use crate::{
         index::Index,
-        query::{query, score::calculator::ScoreCalculator, QueryResult},
+        query::{score::calculator::ScoreCalculator, QueryResult},
     };
     fn approx_equal(a: f64, b: f64, dp: u8) -> bool {
         let p: f64 = 10f64.powf(-(dp as f64));
@@ -31,14 +31,13 @@ pub mod test_util {
     }
 
     pub fn test_score<'arena, M, S: ScoreCalculator<usize, M>>(
-        mut idx: &mut Index<usize>,
+        idx: &mut Index<usize>,
         score_calculator: &mut S,
         q: &str,
         expected: Vec<QueryResult<usize>>,
     ) {
         let fields_len = idx.fields.len();
-        let mut results = query(
-            &mut idx,
+        let mut results = idx.query(
             q,
             score_calculator,
             tokenizer,

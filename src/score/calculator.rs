@@ -1,6 +1,6 @@
 use crate::{
     index::{DocumentDetails, DocumentPointer, FieldDetails, InvertedIndexNode},
-    query::QueryResult,
+    QueryResult,
 };
 use std::{collections::HashMap, fmt::Debug};
 use typed_generational_arena::StandardIndex as ArenaIndex;

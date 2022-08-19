@@ -1,44 +1,60 @@
-pub mod index;
-pub mod query;
-pub mod utils;
+mod index;
+mod query;
+pub mod score;
+
+pub use index::*;
+pub use query::QueryResult;
+
+/// Function that extracts a field value from a document.
+pub type FieldAccessor<D> = fn(&D) -> Option<&str>;
+
+/// Function used to tokenize a field.
+pub type Tokenizer = fn(&str) -> Vec<&str>;
+
+/// Function used to filter fields.
+pub type Filter = fn(&str) -> &str;
 
 #[cfg(test)]
 pub mod test_util {
 
-    use crate::{
-        index::{add_document_to_index, create_index, Index},
-        query::{query, score::calculator::ScoreCalculator, QueryResult},
-    };
+    use crate::{score::ScoreCalculator, Index, QueryResult};
+
     fn approx_equal(a: f64, b: f64, dp: u8) -> bool {
         let p: f64 = 10f64.powf(-(dp as f64));
 
         (a - b).abs() < p
     }
 
-    struct Doc {
-        id: usize,
-        title: String,
+    pub struct Doc {
+        pub id: usize,
+        pub title: String,
+        pub text: String,
     }
-    fn tokenizer(s: &str) -> Vec<&str> {
-        s.split(' ').collect::<Vec<_>>()
-    }
-    fn title_extract(d: &Doc) -> Option<&str> {
+
+    pub fn title_extract(d: &Doc) -> Option<&str> {
         Some(d.title.as_str())
     }
 
-    fn filter(s: &str) -> &str {
+    pub fn text_extract(d: &Doc) -> Option<&str> {
+        Some(d.text.as_str())
+    }
+
+    pub fn tokenizer(s: &str) -> Vec<&str> {
+        s.split(' ').collect::<Vec<_>>()
+    }
+
+    pub fn filter(s: &str) -> &str {
         s
     }
 
     pub fn test_score<'arena, M, S: ScoreCalculator<usize, M>>(
-        mut idx: &mut Index<usize>,
+        idx: &mut Index<usize>,
         score_calculator: &mut S,
         q: &str,
         expected: Vec<QueryResult<usize>>,
     ) {
         let fields_len = idx.fields.len();
-        let mut results = query(
-            &mut idx,
+        let mut results = idx.query(
             q,
             score_calculator,
             tokenizer,
@@ -65,20 +81,14 @@ pub mod test_util {
     */
 
     pub fn build_test_index<'arena>(titles: &[&str]) -> Index<usize> {
-        let mut index: Index<usize> = create_index(1);
+        let mut index = Index::<usize>::new(1);
         for (i, title) in titles.iter().enumerate() {
             let doc = Doc {
                 id: i,
                 title: title.to_string(),
+                text: String::new(),
             };
-            add_document_to_index(
-                &mut index,
-                &[title_extract],
-                tokenizer,
-                filter,
-                doc.id,
-                &doc,
-            );
+            index.add_document(&[title_extract], tokenizer, filter, doc.id, &doc);
         }
         index
     }

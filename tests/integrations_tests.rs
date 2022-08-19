@@ -1,13 +1,10 @@
 use std::{collections::HashSet, sync::Mutex};
 
 use probly_search::{
-    index::{add_document_to_index, create_index, remove_document_from_index, vacuum_index, Index},
-    query::{
-        query,
-        score::default::{bm25, zero_to_one},
-        QueryResult,
-    },
+    score::{bm25, zero_to_one},
+    Index, QueryResult,
 };
+
 #[derive(Clone)]
 struct Doc {
     id: usize,
@@ -33,7 +30,7 @@ fn filter(s: &str) -> &str {
 #[test]
 pub fn test_add_query_delete_bm25() {
     // Create index with 2 fields
-    let mut index = create_index::<usize>(2);
+    let mut index = Index::<usize>::new(2);
 
     // Create docs from a custom Doc struct
     let doc_1 = Doc {
@@ -49,8 +46,7 @@ pub fn test_add_query_delete_bm25() {
     };
 
     // Add documents to index
-    add_document_to_index(
-        &mut index,
+    index.add_document(
         &[title_extract, description_extract],
         tokenizer,
         filter,
@@ -58,8 +54,7 @@ pub fn test_add_query_delete_bm25() {
         &doc_1,
     );
 
-    add_document_to_index(
-        &mut index,
+    index.add_document(
         &[title_extract, description_extract],
         tokenizer,
         filter,
@@ -68,15 +63,7 @@ pub fn test_add_query_delete_bm25() {
     );
 
     // Search, expected 2 results
-    let mut result = query(
-        &mut index,
-        &"abc",
-        &mut bm25::new(),
-        tokenizer,
-        filter,
-        &[1., 1.],
-        None,
-    );
+    let mut result = index.query(&"abc", &mut bm25::new(), tokenizer, filter, &[1., 1.], None);
     assert_eq!(result.len(), 2);
     assert_eq!(
         result[0],
@@ -95,14 +82,13 @@ pub fn test_add_query_delete_bm25() {
 
     // Remove documents from index
     let mut removed_docs = HashSet::new();
-    remove_document_from_index(&mut index, &mut removed_docs, doc_1.id);
+    index.remove_document(&mut removed_docs, doc_1.id);
 
     // Vacuum to remove completely
-    vacuum_index(&mut index, &mut removed_docs);
+    index.vacuum(&mut removed_docs);
 
     // Search, expect 1 result
-    result = query(
-        &mut index,
+    result = index.query(
         &"abc",
         &mut bm25::new(),
         tokenizer,
@@ -122,7 +108,7 @@ pub fn test_add_query_delete_bm25() {
 
 #[test]
 pub fn test_add_query_delete_zero_to_one() {
-    let mut index = create_index::<usize>(2);
+    let mut index = Index::<usize>::new(2);
 
     let doc_1 = Doc {
         id: 0,
@@ -136,8 +122,7 @@ pub fn test_add_query_delete_zero_to_one() {
         description: "abcd".to_string(),
     };
 
-    add_document_to_index(
-        &mut index,
+    index.add_document(
         &[title_extract, description_extract],
         tokenizer,
         filter,
@@ -145,8 +130,7 @@ pub fn test_add_query_delete_zero_to_one() {
         &doc_1,
     );
 
-    add_document_to_index(
-        &mut index,
+    index.add_document(
         &[title_extract, description_extract],
         tokenizer,
         filter,
@@ -155,8 +139,7 @@ pub fn test_add_query_delete_zero_to_one() {
     );
 
     // Search, expected 2 results
-    let mut result = query(
-        &mut index,
+    let mut result = index.query(
         &"abc",
         &mut zero_to_one::new(),
         tokenizer,
@@ -175,11 +158,10 @@ pub fn test_add_query_delete_zero_to_one() {
     );
 
     let mut removed_docs = HashSet::new();
-    remove_document_from_index(&mut index, &mut removed_docs, doc_1.id);
+    index.remove_document(&mut removed_docs, doc_1.id);
 
     // Search, expect 1 result
-    result = query(
-        &mut index,
+    result = index.query(
         &"abc",
         &mut zero_to_one::new(),
         tokenizer,
@@ -200,15 +182,15 @@ pub fn test_add_query_delete_zero_to_one() {
 #[test]
 pub fn it_is_thread_safe() {
     lazy_static::lazy_static! {
-        static ref IDX: Mutex<Index<usize>> = Mutex::new(create_index(2));
+        static ref IDX: Mutex<Index<usize>> = Mutex::new(Index::<usize>::new(2));
     }
     let doc_1 = Doc {
         id: 0,
         title: "abc".to_string(),
         description: "dfg".to_string(),
     };
-    add_document_to_index(
-        &mut *IDX.lock().unwrap(),
+    let mut idx = IDX.lock().unwrap();
+    idx.add_document(
         &[title_extract, description_extract],
         tokenizer,
         filter,

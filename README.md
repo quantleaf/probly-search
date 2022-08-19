@@ -40,9 +40,8 @@ See [recipe search demo project](https://github.com/quantleaf/probly-search-demo
 ```rust
 use std::collections::HashSet;
 use probly_search::{
-    index::{add_document_to_index, create_index, remove_document_from_index, Index},
+    index::Index,
     query::{
-        query,
         score::default::{bm25, zero_to_one},
         QueryResult,
     },
@@ -70,9 +69,8 @@ fn filter(s: &str) -> &str {
    s
 }
 
-
 // Create index with 2 fields
-let mut index = create_index::<usize>(2);
+let mut index = Index::<usize>::new(2);
 
 // Create docs from a custom Doc struct
 let doc_1 = Doc {
@@ -88,8 +86,7 @@ let doc_2 = Doc {
 };
 
 // Add documents to index
-add_document_to_index(
-    &mut index,
+index.add_document(
     &[title_extract, description_extract],
     tokenizer,
     filter,
@@ -97,8 +94,7 @@ add_document_to_index(
     &doc_1,
 );
 
-add_document_to_index(
-    &mut index,
+index.add_document(
     &[title_extract, description_extract],
     tokenizer,
     filter,
@@ -107,8 +103,7 @@ add_document_to_index(
 );
 
 // Search, expected 2 results
-let mut result = query(
-    &mut index,
+let mut result = index.query(
     &"abc",
     &mut bm25::new(),
     tokenizer,
@@ -134,14 +129,13 @@ assert_eq!(
 
 // Remove documents from index
 let mut removed_docs = HashSet::new();
-remove_document_from_index(&mut index, &mut removed_docs, doc_1.id);
+index.remove_document(&mut removed_docs, doc_1.id);
 
 // Vacuum to remove completely
-vacuum_index(&mut index, &mut removed_docs);
+index.vacuum(&mut removed_docs);
 
 // Search, expect 1 result
-result = query(
-    &mut index,
+result = index.query(
     &"abc",
     &mut bm25::new(),
     tokenizer,

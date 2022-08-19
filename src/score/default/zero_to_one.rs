@@ -15,10 +15,8 @@ use std::{
 
 use crate::{
     index::{DocumentDetails, DocumentPointer, InvertedIndexNode},
-    query::{
-        score::calculator::{FieldData, ScoreCalculator, TermData},
-        QueryResult,
-    },
+    score::calculator::{FieldData, ScoreCalculator, TermData},
+    QueryResult,
 };
 
 use typed_generational_arena::StandardIndex as ArenaIndex;
@@ -133,9 +131,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        index::{add_document_to_index, create_index, Index},
-        query::tests::{filter, tokenizer},
-        test_util::{build_test_index, test_score},
+        index::Index,
+        test_util::{build_test_index, filter, test_score, tokenizer},
     };
 
     #[test]
@@ -310,7 +307,7 @@ mod tests {
 
     #[test]
     fn it_combines_multi_field_result() {
-        let mut x: Index<usize> = create_index(2);
+        let mut x = Index::<usize>::new(2);
         let titles = &["abc", "abcefg", "abcefghij"];
         let descriptions = &["abc", "abcefg", "abcefghij"];
         struct DocTitleDescription {
@@ -331,8 +328,7 @@ mod tests {
                 title: title.to_string(),
                 description: description.to_string(),
             };
-            add_document_to_index(
-                &mut x,
+            x.add_document(
                 &[title_extract, description_extract],
                 tokenizer,
                 filter,
@@ -361,7 +357,7 @@ mod tests {
 
     #[test]
     fn it_combines_multi_field_result_by_ignoring_lowest() {
-        let mut x: Index<usize> = create_index(2);
+        let mut x = Index::<usize>::new(2);
         let titles = &["abc", "abcefg", "abcefghij"];
         let descriptions = &["a", "a", "a"];
         struct DocTitleDescription {
@@ -382,8 +378,7 @@ mod tests {
                 title: title.to_string(),
                 description: description.to_string(),
             };
-            add_document_to_index(
-                &mut x,
+            x.add_document(
                 &[title_extract, description_extract],
                 tokenizer,
                 filter,

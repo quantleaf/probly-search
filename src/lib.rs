@@ -6,7 +6,7 @@ pub mod utils;
 pub mod test_util {
 
     use crate::{
-        index::{create_index, Index},
+        index::Index,
         query::{query, score::calculator::ScoreCalculator, QueryResult},
     };
     fn approx_equal(a: f64, b: f64, dp: u8) -> bool {
@@ -65,7 +65,7 @@ pub mod test_util {
     */
 
     pub fn build_test_index<'arena>(titles: &[&str]) -> Index<usize> {
-        let mut index: Index<usize> = create_index(1);
+        let mut index = Index::<usize>::new(1);
         for (i, title) in titles.iter().enumerate() {
             let doc = Doc {
                 id: i,

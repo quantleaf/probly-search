@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use probly_search::index::{create_index_with_capacity, Index};
+use probly_search::index::Index;
 
 criterion_group!(benches, test_speed);
 criterion_main!(benches);
@@ -37,7 +37,7 @@ pub fn test_speed(c: &mut Criterion) {
     }
 
     c.bench_function("add_100k_docs", |b| {
-        let mut index = create_index_with_capacity(1, 100000, 100000);
+        let mut index = Index::<usize>::new_with_capacity(1, 100000, 100000);
         let mut random_strings: Vec<String> = Vec::new();
         for _ in 1..100000 {
             let mut new_rand = generate_string(0, 4);

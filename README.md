@@ -40,7 +40,7 @@ See [recipe search demo project](https://github.com/quantleaf/probly-search-demo
 ```rust
 use std::collections::HashSet;
 use probly_search::{
-    index::{create_index, Index},
+    index::Index,
     query::{
         query,
         score::default::{bm25, zero_to_one},
@@ -71,7 +71,7 @@ fn filter(s: &str) -> &str {
 }
 
 // Create index with 2 fields
-let mut index = create_index::<usize>(2);
+let mut index = Index::<usize>::new(2);
 
 // Create docs from a custom Doc struct
 let doc_1 = Doc {

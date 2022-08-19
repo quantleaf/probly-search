@@ -32,6 +32,43 @@ pub struct Index<T> {
 }
 
 impl<T: Eq + Hash + Copy> Index<T> {
+    /**
+    Creates an Index.
+     * typeparam `T` Document key.
+     * `fieldsNum` Number of fields.
+     * returns `Index`
+     */
+    pub fn new(fields_num: usize) -> Self {
+        Self::new_with_capacity(fields_num, 1000, 10000)
+    }
+
+    /**
+    Creates an Index.
+     * typeparam `T` Document key.
+     * `fieldsNum` Number of fields.
+     * `expected_index_size` Expected node count of index tree.
+     * `expected_documents_count` Expected amount of documents added
+     * returns `Index`
+     */
+    pub fn new_with_capacity(
+        fields_num: usize,
+        expected_index_size: usize,
+        expected_documents_count: usize,
+    ) -> Self {
+        let fields: Vec<FieldDetails> = vec![FieldDetails { sum: 0, avg: 0_f64 }; fields_num];
+        let mut arena_index = StandardArena::new();
+        arena_index.reserve(expected_index_size);
+        let mut arena_doc = StandardArena::new();
+        arena_doc.reserve(expected_documents_count);
+        Self {
+            docs: HashMap::new(),
+            root: arena_index.insert(create_inverted_index_node(&char::from_u32(0).unwrap())),
+            fields,
+            arena_doc,
+            arena_index,
+        }
+    }
+
     pub fn get_root(&self) -> &InvertedIndexNode<T> {
         self.arena_index.get(self.root).unwrap()
     }
@@ -178,41 +215,6 @@ impl<T: Eq + Hash + Copy> Index<T> {
     pub fn vacuum(&mut self, removed: &mut HashSet<T>) {
         vacuum_node(self, self.root, removed);
         removed.clear();
-    }
-}
-/**
-Creates an Index.
- * typeparam `T` Document key.
- * `fieldsNum` Number of fields.
- * returns `Index`
- */
-pub fn create_index<T>(fields_num: usize) -> Index<T> {
-    create_index_with_capacity(fields_num, 1000, 10000)
-}
-/**
-Creates an Index.
- * typeparam `T` Document key.
- * `fieldsNum` Number of fields.
- * `expected_index_size` Expected node count of index tree.
- * `expected_documents_count` Expected amount of documents added
- * returns `Index`
- */
-pub fn create_index_with_capacity<T>(
-    fields_num: usize,
-    expected_index_size: usize,
-    expected_documents_count: usize,
-) -> Index<T> {
-    let fields: Vec<FieldDetails> = vec![FieldDetails { sum: 0, avg: 0_f64 }; fields_num];
-    let mut arena_index = StandardArena::new();
-    arena_index.reserve(expected_index_size);
-    let mut arena_doc = StandardArena::new();
-    arena_doc.reserve(expected_documents_count);
-    Index {
-        docs: HashMap::new(),
-        root: arena_index.insert(create_inverted_index_node(&char::from_u32(0).unwrap())),
-        fields,
-        arena_doc,
-        arena_index,
     }
 }
 
@@ -585,7 +587,7 @@ mod tests {
             let field_accessors: Vec<FieldAccessor<Doc>> =
                 vec![field_accessor as fn(doc: &Doc) -> Option<&str>];
 
-            let mut index = create_index::<usize>(1);
+            let mut index = Index::<usize>::new(1);
             let doc = Doc {
                 id: 1,
                 text: "a b c".to_string(),
@@ -637,7 +639,7 @@ mod tests {
             let field_accessors: Vec<FieldAccessor<Doc>> =
                 vec![field_accessor as fn(doc: &Doc) -> Option<&str>];
 
-            let mut index = create_index::<usize>(1);
+            let mut index = Index::<usize>::new(1);
             let doc_1 = Doc {
                 id: 1,
                 text: "a b c".to_string(),
@@ -697,7 +699,7 @@ mod tests {
             let field_accessors: Vec<FieldAccessor<Doc>> =
                 vec![field_accessor as fn(doc: &Doc) -> Option<&str>];
 
-            let mut index = create_index::<usize>(1);
+            let mut index = Index::<usize>::new(1);
             let doc_1 = Doc {
                 id: 1,
                 text: "a  b".to_string(), // double space could introduce empty tokens
@@ -712,7 +714,7 @@ mod tests {
         use super::*;
         #[test]
         fn it_should_delete_1() {
-            let mut index = create_index::<usize>(1);
+            let mut index = Index::<usize>::new(1);
             assert_eq!(index.arena_doc.is_empty(), true);
 
             let mut removed = HashSet::new();
@@ -765,7 +767,7 @@ mod tests {
 
             #[test]
             fn it_should_find_undefined_children_if_none() {
-                let mut index = create_index::<usize>(1);
+                let mut index = Index::<usize>::new(1);
                 let node = create(&mut index.arena_index, 'x');
                 let c = find_inverted_index_node_child_nodes_by_char(
                     index.arena_index.get(node).unwrap(),
@@ -777,7 +779,7 @@ mod tests {
 
             #[test]
             fn it_should_find_existing() {
-                let mut index = create_index::<usize>(1);
+                let mut index = Index::<usize>::new(1);
                 let p = create(&mut index.arena_index, 'x');
                 let c1 = create(&mut index.arena_index, 'y');
                 let c2 = create(&mut index.arena_index, 'z');
@@ -808,7 +810,7 @@ mod tests {
             use super::*;
             #[test]
             fn it_should_find() {
-                let mut index = create_index::<usize>(1);
+                let mut index = Index::<usize>::new(1);
                 let p = create(&mut index.arena_index, 'x');
                 let a = create(&mut index.arena_index, 'a');
                 let b = create(&mut index.arena_index, 'b');
@@ -831,7 +833,7 @@ mod tests {
                 let field_accessors: Vec<FieldAccessor<Doc>> =
                     vec![field_accessor as fn(doc: &Doc) -> Option<&str>];
 
-                let mut index = create_index::<usize>(1);
+                let mut index = Index::<usize>::new(1);
                 let doc = Doc {
                     id: 1,
                     text: "abc".to_string(),
@@ -851,7 +853,7 @@ mod tests {
                 let field_accessors: Vec<FieldAccessor<Doc>> =
                     vec![field_accessor as fn(doc: &Doc) -> Option<&str>];
 
-                let mut index = create_index::<usize>(1);
+                let mut index = Index::<usize>::new(1);
 
                 let doc = Doc {
                     id: 1,
@@ -869,7 +871,7 @@ mod tests {
 
             #[test]
             fn it_should_count_nodes_empty() {
-                let index = create_index::<usize>(1);
+                let index = Index::<usize>::new(1);
                 assert_eq!(count_nodes(&index), 1); // 1 for root
             }
         }

@@ -1,13 +1,14 @@
 use std::{collections::HashSet, sync::Mutex};
 
 use probly_search::{
-    index::{create_index, Index},
+    index::Index,
     query::{
         query,
         score::default::{bm25, zero_to_one},
         QueryResult,
     },
 };
+
 #[derive(Clone)]
 struct Doc {
     id: usize,
@@ -33,7 +34,7 @@ fn filter(s: &str) -> &str {
 #[test]
 pub fn test_add_query_delete_bm25() {
     // Create index with 2 fields
-    let mut index = create_index::<usize>(2);
+    let mut index = Index::<usize>::new(2);
 
     // Create docs from a custom Doc struct
     let doc_1 = Doc {
@@ -120,7 +121,7 @@ pub fn test_add_query_delete_bm25() {
 
 #[test]
 pub fn test_add_query_delete_zero_to_one() {
-    let mut index = create_index::<usize>(2);
+    let mut index = Index::<usize>::new(2);
 
     let doc_1 = Doc {
         id: 0,
@@ -196,7 +197,7 @@ pub fn test_add_query_delete_zero_to_one() {
 #[test]
 pub fn it_is_thread_safe() {
     lazy_static::lazy_static! {
-        static ref IDX: Mutex<Index<usize>> = Mutex::new(create_index(2));
+        static ref IDX: Mutex<Index<usize>> = Mutex::new(Index::<usize>::new(2));
     }
     let doc_1 = Doc {
         id: 0,

@@ -237,7 +237,7 @@ mod tests {
 
         #[test]
         fn it_should_return_doc_1() {
-            let mut index = create_index::<usize>(2);
+            let mut index = Index::<usize>::new(2);
             let docs = vec![
                 Doc {
                     id: 1,
@@ -278,7 +278,7 @@ mod tests {
 
         #[test]
         fn it_should_return_doc_1_and_2() {
-            let mut index = create_index::<usize>(2);
+            let mut index = Index::<usize>::new(2);
             let docs = vec![
                 Doc {
                     id: 1,
@@ -333,7 +333,7 @@ mod tests {
 
         #[test]
         fn it_should_match_text_by_expanding() {
-            let mut index = create_index::<usize>(2);
+            let mut index = Index::<usize>::new(2);
             let docs = vec![
                 Doc {
                     id: 1,
@@ -376,7 +376,7 @@ mod tests {
 
         #[test]
         fn it_should_use_filter_for_query() {
-            let mut index = create_index::<usize>(2);
+            let mut index = Index::<usize>::new(2);
             let docs = vec![
                 Doc {
                     id: 1,
@@ -420,7 +420,7 @@ mod tests {
 
         #[test]
         fn it_should_use_token_separator_as_disjunction_operator() {
-            let mut index = create_index::<usize>(2);
+            let mut index = Index::<usize>::new(2);
             let docs = vec![
                 Doc {
                     id: 1,
@@ -478,7 +478,7 @@ mod tests {
 
         #[test]
         fn it_should_expand_all() {
-            let mut index = create_index::<usize>(2);
+            let mut index = Index::<usize>::new(2);
             let docs: Vec<Doc> = vec![
                 Doc {
                     id: 1,
@@ -507,7 +507,7 @@ mod tests {
 
         #[test]
         fn it_should_not_expand() {
-            let mut index = create_index::<usize>(2);
+            let mut index = Index::<usize>::new(2);
             let docs = vec![
                 Doc {
                     id: 1,

@@ -133,7 +133,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        index::{create_index, Index},
+        index::Index,
         query::tests::{filter, tokenizer},
         test_util::{build_test_index, test_score},
     };
@@ -310,7 +310,7 @@ mod tests {
 
     #[test]
     fn it_combines_multi_field_result() {
-        let mut x: Index<usize> = create_index(2);
+        let mut x = Index::<usize>::new(2);
         let titles = &["abc", "abcefg", "abcefghij"];
         let descriptions = &["abc", "abcefg", "abcefghij"];
         struct DocTitleDescription {
@@ -360,7 +360,7 @@ mod tests {
 
     #[test]
     fn it_combines_multi_field_result_by_ignoring_lowest() {
-        let mut x: Index<usize> = create_index(2);
+        let mut x = Index::<usize>::new(2);
         let titles = &["abc", "abcefg", "abcefghij"];
         let descriptions = &["a", "a", "a"];
         struct DocTitleDescription {

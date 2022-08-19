@@ -1,27 +1,23 @@
 mod index;
+mod query;
 pub mod score;
 
 pub use index::*;
+pub use query::QueryResult;
 
-/// Type for functions that extract a field value from a document.
+/// Function that extracts a field value from a document.
 pub type FieldAccessor<D> = fn(&D) -> Option<&str>;
 
-/// Type used to tokenize a field.
+/// Function used to tokenize a field.
 pub type Tokenizer = fn(&str) -> Vec<&str>;
 
-/// Type used to filter fields.
+/// Function used to filter fields.
 pub type Filter = fn(&str) -> &str;
-
-#[cfg(test)]
-mod query;
 
 #[cfg(test)]
 pub mod test_util {
 
-    use crate::{
-        index::{Index, QueryResult},
-        score::ScoreCalculator,
-    };
+    use crate::{score::ScoreCalculator, Index, QueryResult};
 
     fn approx_equal(a: f64, b: f64, dp: u8) -> bool {
         let p: f64 = 10f64.powf(-(dp as f64));

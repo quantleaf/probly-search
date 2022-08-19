@@ -5,30 +5,27 @@ use std::{
     usize,
 };
 
-use crate::{score::*, FieldAccessor, Filter, Tokenizer};
+use crate::{FieldAccessor, Filter, Tokenizer};
 extern crate typed_generational_arena;
 use typed_generational_arena::StandardArena;
 use typed_generational_arena::StandardIndex as ArenaIndex;
 
-/**
-Index data structure.
-
-This data structure is optimized for memory consumption and performant mutations during indexing, so it contains only
-basic information.
- * typeparam `T` Document key.
- */
+/// Index data structure.
+///
+/// This data structure is optimized for memory consumption
+/// and performant mutations during indexing.
 #[derive(Debug)]
 
 pub struct Index<T> {
     /// Additional information about documents.
-    pub docs: HashMap<T, DocumentDetails<T>>,
+    pub(crate) docs: HashMap<T, DocumentDetails<T>>,
     /// Inverted index root node.
-    pub root: ArenaIndex<InvertedIndexNode<T>>,
+    pub(crate) root: ArenaIndex<InvertedIndexNode<T>>,
     /// Additional information about indexed fields in all documents.
-    pub fields: Vec<FieldDetails>,
+    pub(crate) fields: Vec<FieldDetails>,
 
-    pub arena_index: StandardArena<InvertedIndexNode<T>>,
-    pub arena_doc: StandardArena<DocumentPointer<T>>,
+    pub(crate) arena_index: StandardArena<InvertedIndexNode<T>>,
+    pub(crate) arena_doc: StandardArena<DocumentPointer<T>>,
 }
 
 impl<T: Eq + Hash + Copy + Debug> Index<T> {
@@ -142,8 +139,11 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
                         create_inverted_index_nodes(&mut self.arena_index, node_index, term, &i);
                     break;
                 }
-                let next_node =
-                    find_inverted_index_node_child_nodes_by_char(node, &char, &self.arena_index);
+                let next_node = Index::<T>::find_inverted_index_node_child_nodes_by_char(
+                    node,
+                    &char,
+                    &self.arena_index,
+                );
                 match next_node {
                     None => {
                         node_index = create_inverted_index_nodes(
@@ -308,108 +308,55 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
     }
 
     /**
-    Performs a search with a simple free text query.
-    All token separators work as a disjunction operator.
-    Arguments
+    Finds inverted index node that matches the `term`.
      * typeparam `T` Document key.
-     * `index`.
-     * `query` Query string.
-     * `score_calculator` A struct that implements the ScoreCalculator trait to provide score calculations.
-     * `tokenizer Tokenizer is a function that breaks a text into words, phrases, symbols, or other meaningful elements called tokens.
-     * `filter` Filter is a function that processes tokens and returns terms, terms are used in Inverted Index to index documents.
-     * `fields_boost` Fields boost factors.
-     * `remove`d Set of removed document keys.
-
-    returns Array of QueryResult structs
-    */
-    pub fn query<M, S: ScoreCalculator<T, M>>(
-        &mut self,
-        query: &str,
-        score_calculator: &mut S,
-        tokenizer: Tokenizer,
-        filter: Filter,
-        fields_boost: &[f64],
-        removed: Option<&HashSet<T>>,
-    ) -> Vec<QueryResult<T>>
-    where
-        T: Copy,
-    {
-        let query_terms = tokenizer(query);
-        let mut scores: HashMap<T, f64> = HashMap::new();
-        for (query_term_index, query_term_pre_filter) in query_terms.iter().enumerate() {
-            let query_term = filter(query_term_pre_filter);
-            if !query_term.is_empty() {
-                let expanded_terms = expand_term(self, query_term, &self.arena_index);
-                let mut visited_documents_for_term: HashSet<T> = HashSet::new();
-                for query_term_expanded in expanded_terms {
-                    let term_node_option = find_inverted_index_node(
-                        self.root,
-                        &query_term_expanded,
-                        &self.arena_index,
-                    );
-                    if let Some(term_node_index) = term_node_option {
-                        let document_frequency =
-                            self.disconnect_and_count_documents(term_node_index, removed);
-                        let term_node = self.arena_index.get(term_node_index).unwrap();
-                        if let Some(term_node_option_first_doc) = term_node.first_doc {
-                            if document_frequency > 0 {
-                                let term_expansion_data = TermData {
-                                    query_term_index,
-                                    all_query_terms: query_terms.clone(),
-                                    query_term,
-                                    query_term_expanded: &query_term_expanded,
-                                };
-                                let pre_calculations = &score_calculator.before_each(
-                                    &term_expansion_data,
-                                    document_frequency,
-                                    &self.docs,
-                                );
-
-                                let mut pointer = Some(term_node_option_first_doc);
-                                while let Some(p) = pointer {
-                                    let pointer_borrowed = self.arena_doc.get(p).unwrap();
-                                    let key = &pointer_borrowed.details_key;
-                                    if removed.is_none() || !removed.unwrap().contains(key) {
-                                        let fields = &self.fields;
-                                        let score = &score_calculator.score(
-                                            pre_calculations.as_ref(),
-                                            pointer_borrowed,
-                                            self.docs.get(key).unwrap(),
-                                            &term_node_index,
-                                            &FieldData {
-                                                fields_boost,
-                                                fields,
-                                            },
-                                            &term_expansion_data,
-                                        );
-                                        if let Some(s) = score {
-                                            let new_score = max_score_merger(
-                                                s,
-                                                scores.get(key),
-                                                visited_documents_for_term.contains(key),
-                                            );
-                                            scores.insert(key.to_owned(), new_score);
-                                        }
-                                    }
-                                    visited_documents_for_term.insert(key.to_owned());
-                                    pointer = pointer_borrowed.next;
-                                }
-                            }
-                        }
-                    }
-                }
+     * `node` Root node.
+     * `term` Term.
+    returns Inverted index node that contains `term` or an `undefined` value.
+     */
+    pub(crate) fn find_inverted_index_node(
+        node: ArenaIndex<InvertedIndexNode<T>>,
+        term: &str,
+        index_arena: &StandardArena<InvertedIndexNode<T>>,
+    ) -> Option<ArenaIndex<InvertedIndexNode<T>>> {
+        let mut node_iteration = Some(node);
+        for char in term.chars() {
+            if let Some(node) = node_iteration {
+                node_iteration = Index::<T>::find_inverted_index_node_child_nodes_by_char(
+                    index_arena.get(node).unwrap(),
+                    &char,
+                    index_arena,
+                );
+            } else {
+                break;
             }
         }
+        node_iteration
+    }
 
-        let mut result: Vec<QueryResult<T>> = Vec::new();
-        for (key, score) in scores {
-            result.push(QueryResult { key, score });
+    /**
+    Finds inverted index child node with matching `char`.
+     * typeparam `T` Document key.
+     * `node` InvertedIndexNode.
+     * `charCode` Char code.
+    returns Matching InvertedIndexNode or `undefined`.
+     */
+    pub(crate) fn find_inverted_index_node_child_nodes_by_char(
+        from_node: &InvertedIndexNode<T>,
+        char: &char,
+        index_arena: &StandardArena<InvertedIndexNode<T>>,
+    ) -> Option<ArenaIndex<InvertedIndexNode<T>>> {
+        let child = from_node.first_child;
+        let mut iter = child;
+        while let Some(node_index) = iter {
+            let node = index_arena.get(node_index).unwrap();
+            if &node.char == char {
+                return Some(node_index);
+            }
+
+            iter = node.next;
         }
-        score_calculator.finalize(&mut result);
-
-        result.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
-
-        result
+        None
     }
 }
 
@@ -520,58 +467,6 @@ fn create_inverted_index_node<T>(char: &char) -> InvertedIndexNode<T> {
 }
 
 /**
-Finds inverted index node that matches the `term`.
- * typeparam `T` Document key.
- * `node` Root node.
- * `term` Term.
-returns Inverted index node that contains `term` or an `undefined` value.
- */
-pub(crate) fn find_inverted_index_node<T>(
-    node: ArenaIndex<InvertedIndexNode<T>>,
-    term: &str,
-    index_arena: &StandardArena<InvertedIndexNode<T>>,
-) -> Option<ArenaIndex<InvertedIndexNode<T>>> {
-    let mut node_iteration = Some(node);
-    for char in term.chars() {
-        if let Some(node) = node_iteration {
-            node_iteration = find_inverted_index_node_child_nodes_by_char(
-                index_arena.get(node).unwrap(),
-                &char,
-                index_arena,
-            );
-        } else {
-            break;
-        }
-    }
-    node_iteration
-}
-
-/**
-Finds inverted index child node with matching `char`.
- * typeparam `T` Document key.
- * `node` InvertedIndexNode.
- * `charCode` Char code.
-returns Matching InvertedIndexNode or `undefined`.
- */
-fn find_inverted_index_node_child_nodes_by_char<T>(
-    from_node: &InvertedIndexNode<T>,
-    char: &char,
-    index_arena: &StandardArena<InvertedIndexNode<T>>,
-) -> Option<ArenaIndex<InvertedIndexNode<T>>> {
-    let child = from_node.first_child;
-    let mut iter = child;
-    while let Some(node_index) = iter {
-        let node = index_arena.get(node_index).unwrap();
-        if &node.char == char {
-            return Some(node_index);
-        }
-
-        iter = node.next;
-    }
-    None
-}
-
-/**
 Adds inverted index child node.
  * typeparam `T` Document key.
  * `parent` Parent node.
@@ -637,89 +532,6 @@ fn create_inverted_index_nodes<T: Clone>(
         parent = new_parent.unwrap();
     }
     parent
-}
-
-/// Result type for querying an index.
-#[derive(Debug, PartialEq)]
-pub struct QueryResult<T> {
-    /**
-     * Document key.
-     */
-    pub key: T,
-    /**
-     * Result score.
-     */
-    pub score: f64,
-}
-
-pub(crate) fn max_score_merger(
-    score: &f64,
-    previous_score: Option<&f64>,
-    document_visited_for_term: bool,
-) -> f64 {
-    {
-        if let Some(p) = previous_score {
-            if document_visited_for_term {
-                f64::max(p.to_owned(), score.to_owned())
-            } else {
-                p + score
-            }
-        } else {
-            score.to_owned()
-        }
-    }
-}
-
-/**
-Expands term with all possible combinations.
- * `index`
- * `term` Term.
-returns All terms that starts with `term` string.
- */
-pub(crate) fn expand_term<I: Debug>(
-    index: &Index<I>,
-    term: &str,
-    arena_index: &StandardArena<InvertedIndexNode<I>>,
-) -> Vec<String> {
-    let node = find_inverted_index_node(index.root, term, &index.arena_index);
-    let mut results = Vec::new();
-    if let Some(n) = node {
-        expand_term_from_node(
-            index.arena_index.get(n).unwrap(),
-            &mut results,
-            term,
-            arena_index,
-        );
-    }
-
-    results
-}
-
-/**
-Recursively goes through inverted index nodes and expands term with all possible combinations.
-
- * typeparam `I` Document ID type.
- * `index {@link Index}
- * `results Results.
- * `term Term.
- */
-fn expand_term_from_node<I: Debug>(
-    node: &InvertedIndexNode<I>,
-    results: &mut Vec<String>,
-    term: &str,
-    arena_index: &StandardArena<InvertedIndexNode<I>>,
-) {
-    if node.first_doc.is_some() {
-        results.push(term.to_owned());
-    }
-    let mut child = node.first_child;
-    while let Some(child_index) = child {
-        let cb = arena_index.get(child_index).unwrap();
-        let mut inter = term.to_owned();
-        inter.push(cb.char);
-        expand_term_from_node(cb, results, &inter, arena_index); // String.fromCharCode(child.charCode)
-        child = cb.next;
-    }
 }
 
 #[cfg(test)]
@@ -957,7 +769,7 @@ mod tests {
             fn it_should_find_undefined_children_if_none() {
                 let mut index = Index::<usize>::new(1);
                 let node = create(&mut index.arena_index, 'x');
-                let c = find_inverted_index_node_child_nodes_by_char(
+                let c = Index::<usize>::find_inverted_index_node_child_nodes_by_char(
                     index.arena_index.get(node).unwrap(),
                     &'x',
                     &index.arena_index,
@@ -974,7 +786,7 @@ mod tests {
                 add_inverted_index_child_node(p, c1, &mut index.arena_index);
                 add_inverted_index_child_node(p, c2, &mut index.arena_index);
                 assert_eq!(
-                    find_inverted_index_node_child_nodes_by_char(
+                    Index::<usize>::find_inverted_index_node_child_nodes_by_char(
                         index.arena_index.get(p).unwrap(),
                         &'y',
                         &index.arena_index
@@ -983,7 +795,7 @@ mod tests {
                     c1
                 );
                 assert_eq!(
-                    find_inverted_index_node_child_nodes_by_char(
+                    Index::<usize>::find_inverted_index_node_child_nodes_by_char(
                         index.arena_index.get(p).unwrap(),
                         &'z',
                         &index.arena_index
@@ -1007,7 +819,7 @@ mod tests {
                 add_inverted_index_child_node(a, b, &mut index.arena_index);
                 add_inverted_index_child_node(b, c, &mut index.arena_index);
                 assert_eq!(
-                    find_inverted_index_node(p, "abc", &index.arena_index).unwrap(),
+                    Index::<usize>::find_inverted_index_node(p, "abc", &index.arena_index).unwrap(),
                     c
                 );
             }

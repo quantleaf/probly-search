@@ -14,8 +14,9 @@ use std::{
 };
 
 use crate::{
-    index::{DocumentDetails, DocumentPointer, InvertedIndexNode, QueryResult},
+    index::{DocumentDetails, DocumentPointer, InvertedIndexNode},
     score::calculator::{FieldData, ScoreCalculator, TermData},
+    QueryResult,
 };
 
 use typed_generational_arena::StandardIndex as ArenaIndex;

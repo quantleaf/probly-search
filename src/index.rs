@@ -213,9 +213,59 @@ impl<T: Eq + Hash + Copy> Index<T> {
      * `removed` Set of removed document ids.
     */
     pub fn vacuum(&mut self, removed: &mut HashSet<T>) {
-        vacuum_node(self, self.root, removed);
+        self.vacuum_node(self.root, removed);
         removed.clear();
     }
+
+//<T: Hash + Eq>
+
+    /**
+    Recursively cleans up removed documents from the index.
+     * `T` Document key.
+     * `index` Index.
+     * `removed` Set of removed document ids.
+    */
+    fn vacuum_node(
+        &mut self,
+        node_index: ArenaIndex<InvertedIndexNode<T>>,
+        removed: &HashSet<T>,
+    ) -> usize {
+        disconnect_and_count_documents(self, node_index, Some(removed));
+        let mut prev_child: Option<ArenaIndex<InvertedIndexNode<T>>> = None;
+        let mut ret = 0;
+        let node = self.arena_index.get(node_index).unwrap();
+        if node.first_doc.is_some() {
+            ret = 1;
+        }
+
+        let mut child_option = node.first_child;
+        while let Some(child_index) = child_option {
+            let r = self.vacuum_node(child_index, removed);
+            ret |= r;
+            if r == 0 {
+                // subtree doesn't have any documents, remove this node
+                match prev_child {
+                    Some(prev) => {
+                        self.arena_index.get_mut(prev).unwrap().next =
+                            self.arena_index.get(child_index).unwrap().next;
+                    }
+                    None => {
+                        self.arena_index.get_mut(node_index).unwrap().first_child =
+                            self.arena_index.get(child_index).unwrap().next;
+                    }
+                }
+            } else {
+                prev_child = Some(child_index);
+            }
+            child_option = self.arena_index.get(child_index).unwrap().next;
+
+            if r == 0 {
+                self.arena_index.remove(child_index);
+            }
+        }
+        ret
+    }
+
 }
 
 /**
@@ -485,53 +535,6 @@ pub fn disconnect_and_count_documents<T: Hash + Eq>(
         }
     }
     document_frequency
-}
-
-/**
-Recursively cleans up removed documents from the index.
- * `T` Document key.
- * `index` Index.
- * `removed` Set of removed document ids.
-*/
-fn vacuum_node<T: Hash + Eq>(
-    index: &mut Index<T>,
-    node_index: ArenaIndex<InvertedIndexNode<T>>,
-    removed: &HashSet<T>,
-) -> usize {
-    disconnect_and_count_documents(index, node_index, Some(removed));
-    let mut prev_child: Option<ArenaIndex<InvertedIndexNode<T>>> = None;
-    let mut ret = 0;
-    let node = index.arena_index.get(node_index).unwrap();
-    if node.first_doc.is_some() {
-        ret = 1;
-    }
-
-    let mut child_option = node.first_child;
-    while let Some(child_index) = child_option {
-        let r = vacuum_node(index, child_index, removed);
-        ret |= r;
-        if r == 0 {
-            // subtree doesn't have any documents, remove this node
-            match prev_child {
-                Some(prev) => {
-                    index.arena_index.get_mut(prev).unwrap().next =
-                        index.arena_index.get(child_index).unwrap().next;
-                }
-                None => {
-                    index.arena_index.get_mut(node_index).unwrap().first_child =
-                        index.arena_index.get(child_index).unwrap().next;
-                }
-            }
-        } else {
-            prev_child = Some(child_index);
-        }
-        child_option = index.arena_index.get(child_index).unwrap().next;
-
-        if r == 0 {
-            index.arena_index.remove(child_index);
-        }
-    }
-    ret
 }
 
 /**

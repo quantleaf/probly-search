@@ -103,17 +103,9 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
                     if !term.is_empty() {
                         all_terms.push(term.clone());
                         filtered_terms_count += 1;
-                        let counts = term_counts.get_mut(&term);
-                        match counts {
-                            None => {
-                                let mut new_count = vec![0; fields_len];
-                                new_count[i] += 1;
-                                term_counts.insert(term, new_count);
-                            }
-                            Some(c) => {
-                                c[i] += 1;
-                            }
-                        }
+                        let counts = term_counts.entry(term)
+                            .or_insert(vec![0; fields_len]);
+                        counts[i] += 1;
                     }
                 }
 

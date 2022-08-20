@@ -39,8 +39,9 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
         tokenizer: Tokenizer,
         filter: Filter,
         fields_boost: &[f64],
-        removed: Option<&HashSet<T>>,
+        //removed: Option<&HashSet<T>>,
     ) -> Vec<QueryResult<T>> {
+        let removed = self.removed_documents();
         let query_terms = tokenizer(query);
         let mut scores = HashMap::new();
         for (query_term_index, query_term_pre_filter) in query_terms.iter().enumerate() {
@@ -219,7 +220,6 @@ pub(crate) mod tests {
                 tokenizer,
                 filter,
                 &[1., 1.],
-                None,
             );
             assert_eq!(result.len(), 1);
             assert_eq!(
@@ -261,7 +261,6 @@ pub(crate) mod tests {
                 tokenizer,
                 filter,
                 &[1., 1.],
-                None,
             );
 
             assert_eq!(result.len(), 2);
@@ -316,7 +315,6 @@ pub(crate) mod tests {
                 tokenizer,
                 filter,
                 &[1., 1.],
-                None,
             );
             assert_eq!(result.len(), 1);
             assert_eq!(
@@ -364,7 +362,6 @@ pub(crate) mod tests {
                 tokenizer,
                 custom_filter,
                 &[1., 1.],
-                None,
             );
             assert_eq!(result.len(), 0);
         }
@@ -401,7 +398,6 @@ pub(crate) mod tests {
                 tokenizer,
                 filter,
                 &[1., 1.],
-                None,
             );
             assert_eq!(result.len(), 2);
             assert_eq!(

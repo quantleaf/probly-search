@@ -26,27 +26,19 @@ pub struct Index<T> {
 
     pub(crate) arena_index: StandardArena<InvertedIndexNode<T>>,
     pub(crate) arena_doc: StandardArena<DocumentPointer<T>>,
+
+    /// Documents that have been removed from the index but
+    /// need to be purged.
+    removed: Option<HashSet<T>>,
 }
 
 impl<T: Eq + Hash + Copy + Debug> Index<T> {
-    /**
-    Creates an Index.
-     * typeparam `T` Document key.
-     * `fieldsNum` Number of fields.
-     * returns `Index`
-     */
+    /// Creates an index.
     pub fn new(fields_num: usize) -> Self {
         Self::new_with_capacity(fields_num, 1000, 10000)
     }
 
-    /**
-    Creates an Index.
-     * typeparam `T` Document key.
-     * `fieldsNum` Number of fields.
-     * `expected_index_size` Expected node count of index tree.
-     * `expected_documents_count` Expected amount of documents added
-     * returns `Index`
-     */
+    /// Creates an index with the expected capacity.
     pub fn new_with_capacity(
         fields_num: usize,
         expected_index_size: usize,
@@ -63,6 +55,7 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
             fields,
             arena_doc,
             arena_index,
+            removed: None,
         }
     }
 
@@ -72,6 +65,12 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
 
     pub fn get_root_mut(&mut self) -> &mut InvertedIndexNode<T> {
         self.arena_index.get_mut(self.root).unwrap()
+    }
+
+    /// Collection of documents that have been removed from the index
+    /// but not yet purged.
+    pub(crate) fn removed_documents(&self) -> Option<&HashSet<T>> {
+        self.removed.as_ref()
     }
 
     /// Adds a document to the index.
@@ -166,7 +165,13 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
     }
 
     /// Remove document from the index.
-    pub fn remove_document(&mut self, removed: &mut HashSet<T>, key: T) {
+    pub fn remove_document(&mut self, key: T) {
+        if self.removed.is_none() {
+            self.removed = Some(Default::default());
+        }
+        let removed = self.removed.as_mut().unwrap();
+
+        //let mut removed = HashSet::new();
         let fields = &mut self.fields;
         let doc_details_option = self.docs.get(&key);
         let mut remove_key = false;
@@ -193,9 +198,11 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
     }
 
     /// Cleans up removed documents from the index.
-    pub fn vacuum(&mut self, removed: &mut HashSet<T>) {
-        self.vacuum_node(self.root, removed);
+    pub fn vacuum(&mut self) {
+        let mut removed = self.removed.take().unwrap_or_default();
+        self.vacuum_node(self.root, &removed);
         removed.clear();
+        self.removed = None;
     }
 
     /// Recursively cleans up removed documents from the index.
@@ -616,7 +623,6 @@ mod tests {
             let mut index = Index::<usize>::new(1);
             assert_eq!(index.arena_doc.is_empty(), true);
 
-            let mut removed = HashSet::new();
             let docs = vec![Doc {
                 id: 1,
                 text: "a".to_string(),
@@ -626,8 +632,8 @@ mod tests {
                 index.add_document(&[field_accessor], tokenizer, filter, doc.id, &doc)
             }
 
-            index.remove_document(&mut removed, 1);
-            index.vacuum(&mut removed);
+            index.remove_document(1);
+            index.vacuum();
 
             assert_eq!(index.docs.len(), 0);
             assert_eq!(index.fields.len(), 1);

@@ -60,7 +60,6 @@ pub mod test_util {
             tokenizer,
             filter,
             &vec![1.; fields_len],
-            None,
         );
         results.sort_by(|a, b| {
             let mut sort = b.score.partial_cmp(&a.score).unwrap();

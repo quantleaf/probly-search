@@ -109,7 +109,6 @@ let mut result = index.query(
     tokenizer,
     filter,
     &[1., 1.],
-    None,
 );
 assert_eq!(result.len(), 2);
 assert_eq!(
@@ -128,11 +127,10 @@ assert_eq!(
 );
 
 // Remove documents from index
-let mut removed_docs = HashSet::new();
-index.remove_document(&mut removed_docs, doc_1.id);
+index.remove_document(doc_1.id);
 
 // Vacuum to remove completely
-index.vacuum(&mut removed_docs);
+index.vacuum();
 
 // Search, expect 1 result
 result = index.query(
@@ -141,7 +139,6 @@ result = index.query(
     tokenizer,
     filter,
     &[1., 1.],
-    Some(&removed_docs),
 );
 assert_eq!(result.len(), 1);
 assert_eq!(

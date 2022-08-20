@@ -8,10 +8,10 @@ pub use index::*;
 pub use query::QueryResult;
 
 /// Function that extracts a field value from a document.
-pub type FieldAccessor< D> = fn(& D) -> Option<&str>;
+pub type FieldAccessor<D> = fn(&D) -> Option<&str>;
 
 /// Function used to tokenize a field.
-pub type Tokenizer = fn( &str) -> Vec<Cow<'_, str>>;
+pub type Tokenizer = fn(&str) -> Vec<Cow<'_, str>>;
 
 #[cfg(test)]
 pub mod test_util {
@@ -31,15 +31,15 @@ pub mod test_util {
         pub text: String,
     }
 
-    pub fn title_extract<'a>(d: &'a Doc) -> Option<&'a str> {
+    pub fn title_extract(d: &Doc) -> Option<&str> {
         Some(d.title.as_str())
     }
 
-    pub fn text_extract<'a>(d: &'a Doc) -> Option<&'a str> {
+    pub fn text_extract(d: &Doc) -> Option<&str> {
         Some(d.text.as_str())
     }
 
-    pub fn tokenizer<'a>(s: &'a str) ->  Vec<Cow<'a, str>> {
+    pub fn tokenizer(s: &str) -> Vec<Cow<str>> {
         s.split(' ').map(Cow::from).collect::<Vec<_>>()
     }
 
@@ -50,12 +50,7 @@ pub mod test_util {
         expected: Vec<QueryResult<usize>>,
     ) {
         let fields_len = idx.fields.len();
-        let mut results = idx.query(
-            q,
-            score_calculator,
-            tokenizer,
-            &vec![1.; fields_len],
-        );
+        let mut results = idx.query(q, score_calculator, tokenizer, &vec![1.; fields_len]);
         results.sort_by(|a, b| {
             let mut sort = b.score.partial_cmp(&a.score).unwrap();
             sort = sort.then_with(|| a.key.partial_cmp(&b.key).unwrap());
@@ -82,7 +77,7 @@ pub mod test_util {
                 title: title.to_string(),
                 text: String::new(),
             };
-            index.add_document(&[title_extract], tokenizer,  doc.id, &doc);
+            index.add_document(&[title_extract], tokenizer, doc.id, &doc);
         }
         index
     }

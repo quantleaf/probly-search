@@ -2,8 +2,8 @@
     https://en.wikipedia.org/wiki/Okapi_BM25
 */
 
-use std::{fmt::Debug};
-use hashbrown::{HashMap};
+use hashbrown::HashMap;
+use std::fmt::Debug;
 
 use crate::{
     index::{DocumentDetails, DocumentPointer, InvertedIndexNode},

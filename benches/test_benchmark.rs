@@ -58,6 +58,6 @@ fn add_all_documents(
             id: i,
             title: s.to_owned(),
         };
-        index.add_document(extractor, tokenizer,  d.id, &d);
+        index.add_document(extractor, tokenizer, d.id, &d);
     }
 }

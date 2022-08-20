@@ -1,12 +1,12 @@
 use std::{
+    borrow::Cow,
     fmt::{Debug, Formatter},
     hash::Hash,
-    usize, borrow::Cow
-    
+    usize,
 };
 
-use hashbrown::{HashMap, HashSet};
 use crate::{FieldAccessor, Tokenizer};
+use hashbrown::{HashMap, HashSet};
 extern crate typed_generational_arena;
 use typed_generational_arena::StandardArena;
 use typed_generational_arena::StandardIndex as ArenaIndex;
@@ -74,21 +74,20 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
         self.removed.as_ref()
     }
 
-
     /// Adds a document to the index.
     pub fn add_document<D>(
         &mut self,
         field_accessors: &[FieldAccessor<D>],
         tokenizer: Tokenizer,
         key: T,
-        doc: & D,
+        doc: &D,
     ) {
         let docs = &mut self.docs;
         let fields = &mut self.fields;
         let mut field_length = vec![0; fields.len()];
         let mut term_counts: HashMap<Cow<str>, Vec<usize>> = HashMap::new();
         let mut all_terms: Vec<Cow<str>> = Vec::new();
-        
+
         for i in 0..fields.len() {
             if let Some(field_value) = field_accessors[i](doc) {
                 let fields_len = fields.len();
@@ -100,25 +99,15 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
                 // filter and count terms, ignore empty strings
                 let mut filtered_terms_count = 0;
                 for term in terms {
-                    if !term.is_empty() { 
+                    if !term.is_empty() {
                         filtered_terms_count += 1;
-                        /* let counts = term_counts
-                            .entry(term.clone())
-                            .or_insert_with(|| vec![0; fields_len]); */
+                        all_terms.push(term.clone());
+                        let counts = term_counts
+                            .entry(term)
+                            .or_insert_with(|| vec![0; fields_len]);
 
-                        let counts = match term_counts.get_mut(&term)
-                        {
-                            Some(counts) => {
-                                counts},
-                            None => {
-                                term_counts.insert(term.clone(), vec![0; fields_len]);
-                                term_counts.get_mut(&term).unwrap()
-                            }
-                        };
-                        counts[i] += 1; 
-                        all_terms.push(term);
-
-                     } 
+                        counts[i] += 1;
+                    }
                 }
 
                 field_details.sum += filtered_terms_count;
@@ -467,7 +456,7 @@ fn create_inverted_index_nodes<T: Clone>(
 mod tests {
     use super::*;
 
-    use crate::test_util::{ tokenizer};
+    use crate::test_util::tokenizer;
 
     /// Count the amount of nodes of the index.
     ///
@@ -516,7 +505,7 @@ mod tests {
                 text: "a b c".to_string(),
             };
 
-            index.add_document(&field_accessors, tokenizer,  doc.id, &doc);
+            index.add_document(&field_accessors, tokenizer, doc.id, &doc);
 
             assert_eq!(index.docs.len(), 1);
             let (_, added_doc) = index.docs.iter().next().unwrap();
@@ -572,9 +561,9 @@ mod tests {
                 text: "b c d".to_string(),
             };
 
-            index.add_document(&field_accessors, tokenizer,  doc_1.id, &doc_1);
+            index.add_document(&field_accessors, tokenizer, doc_1.id, &doc_1);
 
-            index.add_document(&field_accessors, tokenizer,  doc_2.id, &doc_2);
+            index.add_document(&field_accessors, tokenizer, doc_2.id, &doc_2);
 
             assert_eq!(index.docs.len(), 2);
             assert_eq!(
@@ -598,7 +587,7 @@ mod tests {
             assert_eq!(&root.char, &char::from_u32(0).unwrap());
             assert_eq!(&root.next.is_none(), &true);
             assert_eq!(&root.first_doc.is_none(), &true);
-            
+
             let first_child = index.arena_index.get(root.first_child.unwrap()).unwrap();
             assert_eq!(&first_child.char, &char::from_u32(100).unwrap());
             assert_eq!(&first_child.first_child.is_none(), &true);
@@ -628,7 +617,7 @@ mod tests {
                 text: "a  b".to_string(), // double space could introduce empty tokens
             };
 
-            index.add_document(&field_accessors, tokenizer,  doc_1.id, &doc_1);
+            index.add_document(&field_accessors, tokenizer, doc_1.id, &doc_1);
         }
     }
 
@@ -646,7 +635,7 @@ mod tests {
             }];
 
             for doc in docs {
-                index.add_document(&[field_accessor], tokenizer,  doc.id, &doc)
+                index.add_document(&[field_accessor], tokenizer, doc.id, &doc)
             }
 
             index.remove_document(1);
@@ -765,8 +754,8 @@ mod tests {
                     text: "abe".to_string(),
                 };
 
-                index.add_document(&field_accessors, tokenizer,  doc.id, &doc);
-                index.add_document(&field_accessors, tokenizer,  doc_2.id, &doc_2);
+                index.add_document(&field_accessors, tokenizer, doc.id, &doc);
+                index.add_document(&field_accessors, tokenizer, doc_2.id, &doc_2);
                 assert_eq!(count_nodes(&index), 5); //
             }
 
@@ -786,8 +775,8 @@ mod tests {
                     text: "ab ef".to_string(),
                 };
 
-                index.add_document(&field_accessors, tokenizer,  doc.id, &doc);
-                index.add_document(&field_accessors, tokenizer,  doc_2.id, &doc_2);
+                index.add_document(&field_accessors, tokenizer, doc.id, &doc);
+                index.add_document(&field_accessors, tokenizer, doc_2.id, &doc_2);
                 assert_eq!(count_nodes(&index), 7); //
             }
 

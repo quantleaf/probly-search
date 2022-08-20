@@ -1,12 +1,9 @@
-use std::{
-    fmt::Debug,
-    hash::Hash,
-};
 use hashbrown::{HashMap, HashSet};
+use std::{fmt::Debug, hash::Hash};
 
 use typed_generational_arena::StandardArena;
 
-use crate::{score::*,  Index, InvertedIndexNode, Tokenizer};
+use crate::{score::*, Index, InvertedIndexNode, Tokenizer};
 
 /// Result type for querying an index.
 #[derive(Debug, PartialEq)]
@@ -23,17 +20,17 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
     /// All token separators work as a disjunction operator.
     pub fn query<'a, M, S: ScoreCalculator<T, M>>(
         &self,
-        query:  &'a str,
+        query: &'a str,
         score_calculator: &mut S,
         tokenizer: Tokenizer,
         fields_boost: &[f64],
     ) -> Vec<QueryResult<T>> {
         let removed = self.removed_documents();
-         let query_terms = tokenizer(query);/* .iter().map(|term| term.to_string()).collect() */
-         
+        let query_terms = tokenizer(query); /* .iter().map(|term| term.to_string()).collect() */
+
         let mut scores = HashMap::new();
         let query_terms_len = query_terms.len();
-        
+
         for (query_term_index, query_term) in query_terms.iter().enumerate() {
             if !query_term.is_empty() {
                 let expanded_terms = self.expand_term(query_term.as_ref(), &self.arena_index);
@@ -94,7 +91,7 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
                         }
                     }
                 }
-            } 
+            }
         }
 
         let mut result = Vec::new();
@@ -171,7 +168,6 @@ pub(crate) mod tests {
 
     use crate::test_util::*;
     use crate::Index;
-    use std::borrow::Cow;
 
     fn approx_equal(a: f64, b: f64, dp: u8) -> bool {
         let p: f64 = 10f64.powf(-(dp as f64));
@@ -198,18 +194,12 @@ pub(crate) mod tests {
                 },
             ];
             for doc in docs {
-                index.add_document(
-                    &[title_extract, text_extract],
-                    tokenizer,
-                    doc.id,
-                    &doc,
-                );
+                index.add_document(&[title_extract, text_extract], tokenizer, doc.id, &doc);
             }
             let result = index.query(
                 &"a".to_string(),
                 &mut crate::score::bm25::new(),
                 tokenizer,
-                
                 &[1., 1.],
             );
             assert_eq!(result.len(), 1);
@@ -237,20 +227,13 @@ pub(crate) mod tests {
             ];
 
             for doc in docs {
-                index.add_document(
-                    &[title_extract, text_extract],
-                    tokenizer,
-                    
-                    doc.id,
-                    &doc,
-                );
+                index.add_document(&[title_extract, text_extract], tokenizer, doc.id, &doc);
             }
 
             let result = index.query(
                 &"c".to_string(),
                 &mut crate::score::bm25::new(),
                 tokenizer,
-                
                 &[1., 1.],
             );
 
@@ -291,20 +274,13 @@ pub(crate) mod tests {
             ];
 
             for doc in docs {
-                index.add_document(
-                    &[title_extract, text_extract],
-                    tokenizer,
-                    
-                    doc.id,
-                    &doc,
-                );
+                index.add_document(&[title_extract, text_extract], tokenizer, doc.id, &doc);
             }
 
             let result = index.query(
                 &"h".to_string(),
                 &mut crate::score::bm25::new(),
                 tokenizer,
-                
                 &[1., 1.],
             );
             assert_eq!(result.len(), 1);
@@ -332,20 +308,13 @@ pub(crate) mod tests {
             ];
 
             for doc in docs {
-                index.add_document(
-                    &[title_extract, text_extract],
-                    tokenizer,
-                    
-                    doc.id,
-                    &doc,
-                );
+                index.add_document(&[title_extract, text_extract], tokenizer, doc.id, &doc);
             }
 
             let result = index.query(
                 &"a d".to_string(),
                 &mut crate::score::bm25::new(),
                 tokenizer,
-                
                 &[1., 1.],
             );
             assert_eq!(result.len(), 2);
@@ -388,13 +357,7 @@ pub(crate) mod tests {
             ];
 
             for doc in docs {
-                index.add_document(
-                    &[title_extract, text_extract],
-                    tokenizer,
-                    
-                    doc.id,
-                    &doc,
-                );
+                index.add_document(&[title_extract, text_extract], tokenizer, doc.id, &doc);
             }
             let exp = index.expand_term(&"a".to_string(), &index.arena_index);
             assert_eq!(exp, vec!["adef".to_string(), "abc".to_string()]);
@@ -417,13 +380,7 @@ pub(crate) mod tests {
             ];
 
             for doc in docs {
-                index.add_document(
-                    &[title_extract, text_extract],
-                    tokenizer,
-                    
-                    doc.id,
-                    &doc,
-                );
+                index.add_document(&[title_extract, text_extract], tokenizer, doc.id, &doc);
             }
             let exp = index.expand_term(&"x".to_string(), &index.arena_index);
             assert_eq!(exp, Vec::new() as Vec<String>);

@@ -380,7 +380,6 @@ mod tests {
             x.add_document(
                 &[title_extract, description_extract],
                 tokenizer,
-                
                 doc.id,
                 &doc,
             );

@@ -2,9 +2,9 @@ use crate::{
     index::{DocumentDetails, DocumentPointer, FieldDetails, InvertedIndexNode},
     QueryResult,
 };
-use std::{ fmt::Debug};
-use typed_generational_arena::StandardIndex as ArenaIndex;
 use hashbrown::HashMap;
+use std::fmt::Debug;
+use typed_generational_arena::StandardIndex as ArenaIndex;
 
 pub struct TermData<'a> {
     // Current query term index.
@@ -14,9 +14,8 @@ pub struct TermData<'a> {
     // Current expanded term from the expanded terms generated
     // from the current query term `query_term`
     pub query_term_expanded: &'a str,
-
-    // All available query terms
-    pub query_terms_len: usize
+    // Total number of query terms present in the query this TermData was created from
+    pub query_terms_len: usize,
 }
 
 pub struct FieldData<'a> {

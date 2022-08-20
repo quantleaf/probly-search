@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 mod index;
 mod query;
 pub mod score;
@@ -9,15 +11,16 @@ pub use query::QueryResult;
 pub type FieldAccessor<D> = fn(&D) -> Option<&str>;
 
 /// Function used to tokenize a field.
-pub type Tokenizer = fn(&str) -> Vec<&str>;
+pub type Tokenizer = fn(&str) -> Vec<Cow<'_, str>>;
 
 /// Function used to filter fields.
-pub type Filter = fn(&str) -> &str;
+pub type Filter = fn(&str) -> Cow<'_, str>;
 
 #[cfg(test)]
 pub mod test_util {
 
     use crate::{score::ScoreCalculator, Index, QueryResult};
+    use std::borrow::Cow;
 
     fn approx_equal(a: f64, b: f64, dp: u8) -> bool {
         let p: f64 = 10f64.powf(-(dp as f64));
@@ -39,12 +42,12 @@ pub mod test_util {
         Some(d.text.as_str())
     }
 
-    pub fn tokenizer(s: &str) -> Vec<&str> {
-        s.split(' ').collect::<Vec<_>>()
+    pub fn tokenizer(s: &str) -> Vec<Cow<'_, str>> {
+        s.split(' ').map(Cow::from).collect::<Vec<_>>()
     }
 
-    pub fn filter(s: &str) -> &str {
-        s
+    pub fn filter(s: &str) -> Cow<'_, str> {
+        Cow::from(s)
     }
 
     pub fn test_score<'arena, M, S: ScoreCalculator<usize, M>>(
@@ -60,7 +63,6 @@ pub mod test_util {
             tokenizer,
             filter,
             &vec![1.; fields_len],
-            None,
         );
         results.sort_by(|a, b| {
             let mut sort = b.score.partial_cmp(&a.score).unwrap();

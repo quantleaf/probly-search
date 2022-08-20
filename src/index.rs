@@ -26,27 +26,19 @@ pub struct Index<T> {
 
     pub(crate) arena_index: StandardArena<InvertedIndexNode<T>>,
     pub(crate) arena_doc: StandardArena<DocumentPointer<T>>,
+
+    /// Documents that have been removed from the index but
+    /// need to be purged.
+    removed: Option<HashSet<T>>,
 }
 
 impl<T: Eq + Hash + Copy + Debug> Index<T> {
-    /**
-    Creates an Index.
-     * typeparam `T` Document key.
-     * `fieldsNum` Number of fields.
-     * returns `Index`
-     */
+    /// Creates an index.
     pub fn new(fields_num: usize) -> Self {
         Self::new_with_capacity(fields_num, 1000, 10000)
     }
 
-    /**
-    Creates an Index.
-     * typeparam `T` Document key.
-     * `fieldsNum` Number of fields.
-     * `expected_index_size` Expected node count of index tree.
-     * `expected_documents_count` Expected amount of documents added
-     * returns `Index`
-     */
+    /// Creates an index with the expected capacity.
     pub fn new_with_capacity(
         fields_num: usize,
         expected_index_size: usize,
@@ -63,6 +55,7 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
             fields,
             arena_doc,
             arena_index,
+            removed: None,
         }
     }
 
@@ -72,6 +65,12 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
 
     pub fn get_root_mut(&mut self) -> &mut InvertedIndexNode<T> {
         self.arena_index.get_mut(self.root).unwrap()
+    }
+
+    /// Collection of documents that have been removed from the index
+    /// but not yet purged.
+    pub(crate) fn removed_documents(&self) -> Option<&HashSet<T>> {
+        self.removed.as_ref()
     }
 
     /// Adds a document to the index.
@@ -86,8 +85,8 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
         let docs = &mut self.docs;
         let fields = &mut self.fields;
         let mut field_length = vec![0; fields.len()];
-        let mut term_counts: HashMap<&str, Vec<usize>> = HashMap::new();
-        let mut all_terms: Vec<&str> = Vec::new();
+        let mut term_counts: HashMap<String, Vec<usize>> = HashMap::new();
+        let mut all_terms: Vec<String> = Vec::new();
         for i in 0..fields.len() {
             if let Some(field_value) = field_accessors[i](doc) {
                 let fields_len = fields.len();
@@ -98,22 +97,16 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
 
                 // filter and count terms, ignore empty strings
                 let mut filtered_terms_count = 0;
-                for mut term in terms {
-                    term = filter(term);
+                for term in terms {
+                    let filtered = filter(term.as_ref());
+                    let term = filtered.as_ref().to_owned();
                     if !term.is_empty() {
-                        all_terms.push(term);
+                        all_terms.push(term.clone());
                         filtered_terms_count += 1;
-                        let counts = term_counts.get_mut(term);
-                        match counts {
-                            None => {
-                                let mut new_count = vec![0; fields_len];
-                                new_count[i] += 1;
-                                term_counts.insert(term, new_count);
-                            }
-                            Some(c) => {
-                                c[i] += 1;
-                            }
-                        }
+                        let counts = term_counts
+                            .entry(term)
+                            .or_insert_with(|| vec![0; fields_len]);
+                        counts[i] += 1;
                     }
                 }
 
@@ -130,7 +123,7 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
                 let node = self.arena_index.get(node_index).unwrap();
                 if node.first_child.is_none() {
                     node_index =
-                        create_inverted_index_nodes(&mut self.arena_index, node_index, term, &i);
+                        create_inverted_index_nodes(&mut self.arena_index, node_index, &term, &i);
                     break;
                 }
                 let next_node = Index::<T>::find_inverted_index_node_child_nodes_by_char(
@@ -143,7 +136,7 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
                         node_index = create_inverted_index_nodes(
                             &mut self.arena_index,
                             node_index,
-                            term,
+                            &term,
                             &i,
                         );
                         break;
@@ -158,7 +151,7 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
                 DocumentPointer {
                     next: None,
                     details_key: key.to_owned(),
-                    term_frequency: term_counts[term].to_owned(),
+                    term_frequency: term_counts[&term].to_owned(),
                 },
                 &mut self.arena_doc,
             )
@@ -166,7 +159,13 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
     }
 
     /// Remove document from the index.
-    pub fn remove_document(&mut self, removed: &mut HashSet<T>, key: T) {
+    pub fn remove_document(&mut self, key: T) {
+        if self.removed.is_none() {
+            self.removed = Some(Default::default());
+        }
+        let removed = self.removed.as_mut().unwrap();
+
+        //let mut removed = HashSet::new();
         let fields = &mut self.fields;
         let doc_details_option = self.docs.get(&key);
         let mut remove_key = false;
@@ -193,9 +192,11 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
     }
 
     /// Cleans up removed documents from the index.
-    pub fn vacuum(&mut self, removed: &mut HashSet<T>) {
-        self.vacuum_node(self.root, removed);
+    pub fn vacuum(&mut self) {
+        let mut removed = self.removed.take().unwrap_or_default();
+        self.vacuum_node(self.root, &removed);
         removed.clear();
+        self.removed = None;
     }
 
     /// Recursively cleans up removed documents from the index.
@@ -274,6 +275,24 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
             if is_removed {
                 self.arena_doc.remove(pointer);
             }
+        }
+        document_frequency
+    }
+
+    /// Count the document frequency.
+    pub(crate) fn count_documents(&self, node_index: ArenaIndex<InvertedIndexNode<T>>) -> usize {
+        let node = self.arena_index.get(node_index).unwrap();
+        let mut pointer_option = node.first_doc;
+        let mut document_frequency = 0;
+        while let Some(pointer) = pointer_option {
+            let is_removed = match &self.removed {
+                Some(set) => set.contains(&self.arena_doc.get(pointer).unwrap().details_key),
+                None => false,
+            };
+            if !is_removed {
+                document_frequency += 1;
+            }
+            pointer_option = self.arena_doc.get(pointer).unwrap().next;
         }
         document_frequency
     }
@@ -435,8 +454,9 @@ fn create_inverted_index_nodes<T: Clone>(
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
+
+    use crate::test_util::{filter, tokenizer};
 
     /// Count the amount of nodes of the index.
     ///
@@ -466,13 +486,6 @@ mod tests {
         text: String,
     }
 
-    fn tokenizer(s: &str) -> Vec<&str> {
-        s.split(' ').collect::<Vec<_>>()
-    }
-
-    fn filter(s: &str) -> &str {
-        s
-    }
     fn field_accessor(doc: &Doc) -> Option<&str> {
         Some(doc.text.as_str())
     }
@@ -616,7 +629,6 @@ mod tests {
             let mut index = Index::<usize>::new(1);
             assert_eq!(index.arena_doc.is_empty(), true);
 
-            let mut removed = HashSet::new();
             let docs = vec![Doc {
                 id: 1,
                 text: "a".to_string(),
@@ -626,8 +638,8 @@ mod tests {
                 index.add_document(&[field_accessor], tokenizer, filter, doc.id, &doc)
             }
 
-            index.remove_document(&mut removed, 1);
-            index.vacuum(&mut removed);
+            index.remove_document(1);
+            index.vacuum();
 
             assert_eq!(index.docs.len(), 0);
             assert_eq!(index.fields.len(), 1);

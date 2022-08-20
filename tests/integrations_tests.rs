@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::Mutex};
+use std::{borrow::Cow, sync::Mutex};
 
 use probly_search::{
     score::{bm25, zero_to_one},
@@ -12,9 +12,10 @@ struct Doc {
     description: String,
 }
 
-fn tokenizer(s: &str) -> Vec<&str> {
-    s.split(' ').collect::<Vec<_>>()
+fn tokenizer(s: &str) -> Vec<Cow<'_, str>> {
+    s.split(' ').map(Cow::from).collect::<Vec<_>>()
 }
+
 fn title_extract(d: &Doc) -> Option<&str> {
     Some(d.title.as_str())
 }
@@ -23,8 +24,8 @@ fn description_extract(d: &Doc) -> Option<&str> {
     Some(d.description.as_str())
 }
 
-fn filter(s: &str) -> &str {
-    s
+fn filter(s: &str) -> Cow<'_, str> {
+    Cow::from(s)
 }
 
 #[test]
@@ -63,7 +64,7 @@ pub fn test_add_query_delete_bm25() {
     );
 
     // Search, expected 2 results
-    let mut result = index.query(&"abc", &mut bm25::new(), tokenizer, filter, &[1., 1.], None);
+    let mut result = index.query(&"abc", &mut bm25::new(), tokenizer, filter, &[1., 1.]);
     assert_eq!(result.len(), 2);
     assert_eq!(
         result[0],
@@ -81,21 +82,13 @@ pub fn test_add_query_delete_bm25() {
     );
 
     // Remove documents from index
-    let mut removed_docs = HashSet::new();
-    index.remove_document(&mut removed_docs, doc_1.id);
+    index.remove_document(doc_1.id);
 
     // Vacuum to remove completely
-    index.vacuum(&mut removed_docs);
+    index.vacuum();
 
     // Search, expect 1 result
-    result = index.query(
-        &"abc",
-        &mut bm25::new(),
-        tokenizer,
-        filter,
-        &[1., 1.],
-        Some(&removed_docs),
-    );
+    result = index.query(&"abc", &mut bm25::new(), tokenizer, filter, &[1., 1.]);
     assert_eq!(result.len(), 1);
     assert_eq!(
         result[0],
@@ -145,7 +138,6 @@ pub fn test_add_query_delete_zero_to_one() {
         tokenizer,
         filter,
         &[1., 1.],
-        None,
     );
     assert_eq!(result.len(), 2);
     assert_eq!(result[0], QueryResult { key: 0, score: 1. });
@@ -157,8 +149,7 @@ pub fn test_add_query_delete_zero_to_one() {
         }
     );
 
-    let mut removed_docs = HashSet::new();
-    index.remove_document(&mut removed_docs, doc_1.id);
+    index.remove_document(doc_1.id);
 
     // Search, expect 1 result
     result = index.query(
@@ -167,7 +158,6 @@ pub fn test_add_query_delete_zero_to_one() {
         tokenizer,
         filter,
         &[1., 1.],
-        Some(&removed_docs),
     );
     assert_eq!(result.len(), 1);
     assert_eq!(

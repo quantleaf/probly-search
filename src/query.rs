@@ -17,36 +17,25 @@ pub struct QueryResult<T> {
 }
 
 impl<T: Eq + Hash + Copy + Debug> Index<T> {
-    /**
-    Performs a search with a simple free text query.
-    All token separators work as a disjunction operator.
-    Arguments
-     * typeparam `T` Document key.
-     * `index`.
-     * `query` Query string.
-     * `score_calculator` A struct that implements the ScoreCalculator trait to provide score calculations.
-     * `tokenizer Tokenizer is a function that breaks a text into words, phrases, symbols, or other meaningful elements called tokens.
-     * `filter` Filter is a function that processes tokens and returns terms, terms are used in Inverted Index to index documents.
-     * `fields_boost` Fields boost factors.
-     * `remove`d Set of removed document keys.
-
-    returns Array of QueryResult structs
-    */
+    /// Performs a search with a simple free text query.
+    ///
+    /// All token separators work as a disjunction operator.
     pub fn query<M, S: ScoreCalculator<T, M>>(
-        &mut self,
+        &self,
         query: &str,
         score_calculator: &mut S,
         tokenizer: Tokenizer,
         filter: Filter,
         fields_boost: &[f64],
-        removed: Option<&HashSet<T>>,
     ) -> Vec<QueryResult<T>> {
+        let removed = self.removed_documents();
         let query_terms = tokenizer(query);
         let mut scores = HashMap::new();
         for (query_term_index, query_term_pre_filter) in query_terms.iter().enumerate() {
             let query_term = filter(query_term_pre_filter);
+            let query_term = query_term.as_ref();
             if !query_term.is_empty() {
-                let expanded_terms = self.expand_term(query_term, &self.arena_index);
+                let expanded_terms = self.expand_term(query_term.as_ref(), &self.arena_index);
                 let mut visited_documents_for_term = HashSet::new();
                 for query_term_expanded in expanded_terms {
                     let term_node_option = Index::<T>::find_inverted_index_node(
@@ -55,8 +44,7 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
                         &self.arena_index,
                     );
                     if let Some(term_node_index) = term_node_option {
-                        let document_frequency =
-                            self.disconnect_and_count_documents(term_node_index, removed);
+                        let document_frequency = self.count_documents(term_node_index);
                         let term_node = self.arena_index.get(term_node_index).unwrap();
                         if let Some(term_node_option_first_doc) = term_node.first_doc {
                             if document_frequency > 0 {
@@ -179,9 +167,10 @@ fn max_score_merger(
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use crate::Index;
 
     use crate::test_util::*;
+    use crate::Index;
+    use std::borrow::Cow;
 
     fn approx_equal(a: f64, b: f64, dp: u8) -> bool {
         let p: f64 = 10f64.powf(-(dp as f64));
@@ -222,7 +211,6 @@ pub(crate) mod tests {
                 tokenizer,
                 filter,
                 &[1., 1.],
-                None,
             );
             assert_eq!(result.len(), 1);
             assert_eq!(
@@ -264,8 +252,8 @@ pub(crate) mod tests {
                 tokenizer,
                 filter,
                 &[1., 1.],
-                None,
             );
+
             assert_eq!(result.len(), 2);
             assert_eq!(
                 approx_equal(result.get(0).unwrap().score, 0.1823215567939546, 8),
@@ -318,7 +306,6 @@ pub(crate) mod tests {
                 tokenizer,
                 filter,
                 &[1., 1.],
-                None,
             );
             assert_eq!(result.len(), 1);
             assert_eq!(
@@ -354,9 +341,9 @@ pub(crate) mod tests {
                 );
             }
 
-            fn custom_filter(s: &str) -> &str {
+            fn custom_filter(s: &str) -> Cow<'_, str> {
                 if s == "a" {
-                    return "";
+                    return Cow::from("");
                 }
                 filter(s)
             }
@@ -366,7 +353,6 @@ pub(crate) mod tests {
                 tokenizer,
                 custom_filter,
                 &[1., 1.],
-                None,
             );
             assert_eq!(result.len(), 0);
         }
@@ -403,7 +389,6 @@ pub(crate) mod tests {
                 tokenizer,
                 filter,
                 &[1., 1.],
-                None,
             );
             assert_eq!(result.len(), 2);
             assert_eq!(

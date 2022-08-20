@@ -1,5 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use probly_search::Index;
+use std::borrow::Cow;
 
 criterion_group!(benches, test_speed);
 criterion_main!(benches);
@@ -8,11 +9,12 @@ struct DocX {
     title: String,
 }
 
-fn filter(s: &str) -> &str {
-    s
+fn filter(s: &str) -> Cow<'_, str> {
+    Cow::from(s)
 }
-fn tokenizer(s: &str) -> Vec<&str> {
-    s.split(' ').collect::<Vec<_>>()
+
+fn tokenizer(s: &str) -> Vec<Cow<'_, str>> {
+    s.split(' ').map(Cow::from).collect::<Vec<_>>()
 }
 
 pub fn test_speed(c: &mut Criterion) {

@@ -8,13 +8,10 @@ pub use index::*;
 pub use query::QueryResult;
 
 /// Function that extracts a field value from a document.
-pub type FieldAccessor<D> = fn(&D) -> Option<&str>;
+pub type FieldAccessor< D> = fn(& D) -> Option<&str>;
 
 /// Function used to tokenize a field.
-pub type Tokenizer = fn(&str) -> Vec<Cow<'_, str>>;
-
-/// Function used to filter fields.
-pub type Filter = fn(&str) -> Cow<'_, str>;
+pub type Tokenizer = fn( &str) -> Vec<Cow<'_, str>>;
 
 #[cfg(test)]
 pub mod test_util {
@@ -34,20 +31,16 @@ pub mod test_util {
         pub text: String,
     }
 
-    pub fn title_extract(d: &Doc) -> Option<&str> {
+    pub fn title_extract<'a>(d: &'a Doc) -> Option<&'a str> {
         Some(d.title.as_str())
     }
 
-    pub fn text_extract(d: &Doc) -> Option<&str> {
+    pub fn text_extract<'a>(d: &'a Doc) -> Option<&'a str> {
         Some(d.text.as_str())
     }
 
-    pub fn tokenizer(s: &str) -> Vec<Cow<'_, str>> {
+    pub fn tokenizer<'a>(s: &'a str) ->  Vec<Cow<'a, str>> {
         s.split(' ').map(Cow::from).collect::<Vec<_>>()
-    }
-
-    pub fn filter(s: &str) -> Cow<'_, str> {
-        Cow::from(s)
     }
 
     pub fn test_score<'arena, M, S: ScoreCalculator<usize, M>>(
@@ -61,7 +54,6 @@ pub mod test_util {
             q,
             score_calculator,
             tokenizer,
-            filter,
             &vec![1.; fields_len],
         );
         results.sort_by(|a, b| {
@@ -90,7 +82,7 @@ pub mod test_util {
                 title: title.to_string(),
                 text: String::new(),
             };
-            index.add_document(&[title_extract], tokenizer, filter, doc.id, &doc);
+            index.add_document(&[title_extract], tokenizer,  doc.id, &doc);
         }
         index
     }

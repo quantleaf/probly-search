@@ -70,7 +70,7 @@ impl<T: Debug + Eq + Hash + Clone> ScoreCalculator<T, ZeroToOneBeforeCalculation
 
                 self.score_by_document_and_field.get_mut(key).unwrap()[x].push(ScoreByTerm {
                     score: 1. - f64::abs(term_exp_len - term_len) / (term_exp_len),
-                    all_query_terms_len: term_data.all_query_terms.len(),
+                    all_query_terms_len: term_data.query_terms_len,
                     query_term_index: term_data.query_term_index.to_owned(),
                     index_node_id: index_node.to_idx(),
                     term_frequency: tf,
@@ -132,7 +132,7 @@ mod tests {
     use super::*;
     use crate::{
         index::Index,
-        test_util::{build_test_index, filter, test_score, tokenizer},
+        test_util::{build_test_index, test_score, tokenizer},
     };
 
     #[test]
@@ -200,7 +200,7 @@ mod tests {
             &"abc ab".to_string(),
             vec![QueryResult {
                 key: 0,
-                score: 0.83333333333333337_f64,
+                score: 0.833_333_333_333_333_4_f64,
             }],
         );
     }
@@ -331,7 +331,6 @@ mod tests {
             x.add_document(
                 &[title_extract, description_extract],
                 tokenizer,
-                filter,
                 doc.id,
                 &doc,
             );
@@ -381,7 +380,7 @@ mod tests {
             x.add_document(
                 &[title_extract, description_extract],
                 tokenizer,
-                filter,
+                
                 doc.id,
                 &doc,
             );

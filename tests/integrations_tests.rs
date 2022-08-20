@@ -24,9 +24,6 @@ fn description_extract(d: &Doc) -> Option<&str> {
     Some(d.description.as_str())
 }
 
-fn filter(s: &str) -> Cow<'_, str> {
-    Cow::from(s)
-}
 
 #[test]
 pub fn test_add_query_delete_bm25() {
@@ -45,12 +42,11 @@ pub fn test_add_query_delete_bm25() {
         title: "dfgh".to_string(),
         description: "abcd".to_string(),
     };
-
     // Add documents to index
     index.add_document(
         &[title_extract, description_extract],
         tokenizer,
-        filter,
+        
         doc_1.id,
         &doc_1,
     );
@@ -58,13 +54,13 @@ pub fn test_add_query_delete_bm25() {
     index.add_document(
         &[title_extract, description_extract],
         tokenizer,
-        filter,
+        
         doc_2.id,
         &doc_2,
     );
 
     // Search, expected 2 results
-    let mut result = index.query(&"abc", &mut bm25::new(), tokenizer, filter, &[1., 1.]);
+    let mut result = index.query("abc", &mut bm25::new(), tokenizer,  &[1., 1.]);
     assert_eq!(result.len(), 2);
     assert_eq!(
         result[0],
@@ -88,7 +84,7 @@ pub fn test_add_query_delete_bm25() {
     index.vacuum();
 
     // Search, expect 1 result
-    result = index.query(&"abc", &mut bm25::new(), tokenizer, filter, &[1., 1.]);
+    result = index.query("abc", &mut bm25::new(), tokenizer,  &[1., 1.]);
     assert_eq!(result.len(), 1);
     assert_eq!(
         result[0],
@@ -118,7 +114,7 @@ pub fn test_add_query_delete_zero_to_one() {
     index.add_document(
         &[title_extract, description_extract],
         tokenizer,
-        filter,
+        
         doc_1.id,
         &doc_1,
     );
@@ -126,17 +122,17 @@ pub fn test_add_query_delete_zero_to_one() {
     index.add_document(
         &[title_extract, description_extract],
         tokenizer,
-        filter,
+        
         doc_2.id,
         &doc_2,
     );
 
     // Search, expected 2 results
     let mut result = index.query(
-        &"abc",
+        "abc",
         &mut zero_to_one::new(),
         tokenizer,
-        filter,
+        
         &[1., 1.],
     );
     assert_eq!(result.len(), 2);
@@ -153,10 +149,10 @@ pub fn test_add_query_delete_zero_to_one() {
 
     // Search, expect 1 result
     result = index.query(
-        &"abc",
+        "abc",
         &mut zero_to_one::new(),
         tokenizer,
-        filter,
+        
         &[1., 1.],
     );
     assert_eq!(result.len(), 1);
@@ -183,7 +179,7 @@ pub fn it_is_thread_safe() {
     idx.add_document(
         &[title_extract, description_extract],
         tokenizer,
-        filter,
+        
         doc_1.id,
         &doc_1,
     );

@@ -6,14 +6,13 @@ use std::{collections::HashMap, fmt::Debug};
 use typed_generational_arena::StandardIndex as ArenaIndex;
 
 pub struct TermData<'a> {
-    // The current query term
+    // Current query term index.
     pub query_term_index: usize,
-
+    /// Current query term.
     pub query_term: &'a str,
-
-    // The current expanded term from the expanded terms generated from the current query term `query_term`
+    // Current expanded term from the expanded terms generated
+    // from the current query term `query_term`
     pub query_term_expanded: &'a str,
-
     // All available query terms
     pub all_query_terms: Vec<&'a str>,
 }
@@ -21,8 +20,7 @@ pub struct TermData<'a> {
 pub struct FieldData<'a> {
     /// `fields_boost` expected boost from query arguments
     pub fields_boost: &'a [f64],
-
-    /// Statistics about each field
+    /// Statistics about each field.
     pub fields: &'a [FieldDetails],
 }
 

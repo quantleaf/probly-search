@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::{borrow::Cow, sync::Mutex};
 
 use probly_search::{
     score::{bm25, zero_to_one},
@@ -23,8 +23,8 @@ fn description_extract(d: &Doc) -> Option<&str> {
     Some(d.description.as_str())
 }
 
-fn filter(s: &str) -> &str {
-    s
+fn filter(s: &str) -> Cow<'_, str> {
+    Cow::from(s)
 }
 
 #[test]

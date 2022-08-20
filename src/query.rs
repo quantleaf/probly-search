@@ -33,8 +33,9 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
         let mut scores = HashMap::new();
         for (query_term_index, query_term_pre_filter) in query_terms.iter().enumerate() {
             let query_term = filter(query_term_pre_filter);
+            let query_term = query_term.as_ref();
             if !query_term.is_empty() {
-                let expanded_terms = self.expand_term(query_term, &self.arena_index);
+                let expanded_terms = self.expand_term(query_term.as_ref(), &self.arena_index);
                 let mut visited_documents_for_term = HashSet::new();
                 for query_term_expanded in expanded_terms {
                     let term_node_option = Index::<T>::find_inverted_index_node(
@@ -164,9 +165,10 @@ fn max_score_merger(
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use crate::Index;
 
     use crate::test_util::*;
+    use crate::Index;
+    use std::borrow::Cow;
 
     fn approx_equal(a: f64, b: f64, dp: u8) -> bool {
         let p: f64 = 10f64.powf(-(dp as f64));
@@ -337,9 +339,9 @@ pub(crate) mod tests {
                 );
             }
 
-            fn custom_filter(s: &str) -> &str {
+            fn custom_filter(s: &str) -> Cow<'_, str> {
                 if s == "a" {
-                    return "";
+                    return Cow::from("");
                 }
                 filter(s)
             }

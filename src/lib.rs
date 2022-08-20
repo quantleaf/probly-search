@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 mod index;
 mod query;
 pub mod score;
@@ -12,12 +14,13 @@ pub type FieldAccessor<D> = fn(&D) -> Option<&str>;
 pub type Tokenizer = fn(&str) -> Vec<&str>;
 
 /// Function used to filter fields.
-pub type Filter = fn(&str) -> &str;
+pub type Filter = fn(&str) -> Cow<'_, str>;
 
 #[cfg(test)]
 pub mod test_util {
 
     use crate::{score::ScoreCalculator, Index, QueryResult};
+    use std::borrow::Cow;
 
     fn approx_equal(a: f64, b: f64, dp: u8) -> bool {
         let p: f64 = 10f64.powf(-(dp as f64));
@@ -43,8 +46,8 @@ pub mod test_util {
         s.split(' ').collect::<Vec<_>>()
     }
 
-    pub fn filter(s: &str) -> &str {
-        s
+    pub fn filter(s: &str) -> Cow<'_, str> {
+        Cow::from(s)
     }
 
     pub fn test_score<'arena, M, S: ScoreCalculator<usize, M>>(

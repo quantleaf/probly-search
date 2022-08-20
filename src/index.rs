@@ -85,8 +85,8 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
         let docs = &mut self.docs;
         let fields = &mut self.fields;
         let mut field_length = vec![0; fields.len()];
-        let mut term_counts: HashMap<&str, Vec<usize>> = HashMap::new();
-        let mut all_terms: Vec<&str> = Vec::new();
+        let mut term_counts: HashMap<String, Vec<usize>> = HashMap::new();
+        let mut all_terms: Vec<String> = Vec::new();
         for i in 0..fields.len() {
             if let Some(field_value) = field_accessors[i](doc) {
                 let fields_len = fields.len();
@@ -97,12 +97,13 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
 
                 // filter and count terms, ignore empty strings
                 let mut filtered_terms_count = 0;
-                for mut term in terms {
-                    term = filter(term);
+                for term in terms {
+                    let filtered = filter(term);
+                    let term = filtered.as_ref().to_owned();
                     if !term.is_empty() {
-                        all_terms.push(term);
+                        all_terms.push(term.clone());
                         filtered_terms_count += 1;
-                        let counts = term_counts.get_mut(term);
+                        let counts = term_counts.get_mut(&term);
                         match counts {
                             None => {
                                 let mut new_count = vec![0; fields_len];
@@ -129,7 +130,7 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
                 let node = self.arena_index.get(node_index).unwrap();
                 if node.first_child.is_none() {
                     node_index =
-                        create_inverted_index_nodes(&mut self.arena_index, node_index, term, &i);
+                        create_inverted_index_nodes(&mut self.arena_index, node_index, &term, &i);
                     break;
                 }
                 let next_node = Index::<T>::find_inverted_index_node_child_nodes_by_char(
@@ -142,7 +143,7 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
                         node_index = create_inverted_index_nodes(
                             &mut self.arena_index,
                             node_index,
-                            term,
+                            &term,
                             &i,
                         );
                         break;
@@ -157,7 +158,7 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
                 DocumentPointer {
                     next: None,
                     details_key: key.to_owned(),
-                    term_frequency: term_counts[term].to_owned(),
+                    term_frequency: term_counts[&term].to_owned(),
                 },
                 &mut self.arena_doc,
             )
@@ -454,8 +455,8 @@ fn create_inverted_index_nodes<T: Clone>(
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
+    use std::borrow::Cow;
 
     /// Count the amount of nodes of the index.
     ///
@@ -489,8 +490,8 @@ mod tests {
         s.split(' ').collect::<Vec<_>>()
     }
 
-    fn filter(s: &str) -> &str {
-        s
+    fn filter(s: &str) -> Cow<'_, str> {
+        Cow::from(s)
     }
     fn field_accessor(doc: &Doc) -> Option<&str> {
         Some(doc.text.as_str())

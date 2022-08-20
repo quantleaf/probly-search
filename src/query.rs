@@ -47,46 +47,48 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
                         let document_frequency = self.count_documents(term_node_index);
                         let term_node = self.arena_index.get(term_node_index).unwrap();
                         if let Some(term_node_option_first_doc) = term_node.first_doc {
-                            let term_expansion_data = TermData {
-                                query_term_index,
-                                all_query_terms: query_terms.clone(),
-                                query_term,
-                                query_term_expanded: &query_term_expanded,
-                            };
-                            let pre_calculations = &score_calculator.before_each(
-                                &term_expansion_data,
-                                document_frequency,
-                                &self.docs,
-                            );
+                            if document_frequency > 0 {
+                                let term_expansion_data = TermData {
+                                    query_term_index,
+                                    all_query_terms: query_terms.clone(),
+                                    query_term,
+                                    query_term_expanded: &query_term_expanded,
+                                };
+                                let pre_calculations = &score_calculator.before_each(
+                                    &term_expansion_data,
+                                    document_frequency,
+                                    &self.docs,
+                                );
 
-                            let mut pointer = Some(term_node_option_first_doc);
-                            while let Some(p) = pointer {
-                                let pointer_borrowed = self.arena_doc.get(p).unwrap();
-                                let key = &pointer_borrowed.details_key;
-                                if removed.is_none() || !removed.unwrap().contains(key) {
-                                    let fields = &self.fields;
-                                    let score = &score_calculator.score(
-                                        pre_calculations.as_ref(),
-                                        pointer_borrowed,
-                                        self.docs.get(key).unwrap(),
-                                        &term_node_index,
-                                        &FieldData {
-                                            fields_boost,
-                                            fields,
-                                        },
-                                        &term_expansion_data,
-                                    );
-                                    if let Some(s) = score {
-                                        let new_score = max_score_merger(
-                                            s,
-                                            scores.get(key),
-                                            visited_documents_for_term.contains(key),
+                                let mut pointer = Some(term_node_option_first_doc);
+                                while let Some(p) = pointer {
+                                    let pointer_borrowed = self.arena_doc.get(p).unwrap();
+                                    let key = &pointer_borrowed.details_key;
+                                    if removed.is_none() || !removed.unwrap().contains(key) {
+                                        let fields = &self.fields;
+                                        let score = &score_calculator.score(
+                                            pre_calculations.as_ref(),
+                                            pointer_borrowed,
+                                            self.docs.get(key).unwrap(),
+                                            &term_node_index,
+                                            &FieldData {
+                                                fields_boost,
+                                                fields,
+                                            },
+                                            &term_expansion_data,
                                         );
-                                        scores.insert(*key, new_score);
+                                        if let Some(s) = score {
+                                            let new_score = max_score_merger(
+                                                s,
+                                                scores.get(key),
+                                                visited_documents_for_term.contains(key),
+                                            );
+                                            scores.insert(*key, new_score);
+                                        }
                                     }
+                                    visited_documents_for_term.insert(*key);
+                                    pointer = pointer_borrowed.next;
                                 }
-                                visited_documents_for_term.insert(*key);
-                                pointer = pointer_borrowed.next;
                             }
                         }
                     }

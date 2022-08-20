@@ -11,7 +11,7 @@ pub use query::QueryResult;
 pub type FieldAccessor<D> = fn(&D) -> Option<&str>;
 
 /// Function used to tokenize a field.
-pub type Tokenizer = fn(&str) -> Vec<&str>;
+pub type Tokenizer = fn(&str) -> Vec<Cow<'_, str>>;
 
 /// Function used to filter fields.
 pub type Filter = fn(&str) -> Cow<'_, str>;
@@ -42,8 +42,8 @@ pub mod test_util {
         Some(d.text.as_str())
     }
 
-    pub fn tokenizer(s: &str) -> Vec<&str> {
-        s.split(' ').collect::<Vec<_>>()
+    pub fn tokenizer(s: &str) -> Vec<Cow<'_, str>> {
+        s.split(' ').map(Cow::from).collect::<Vec<_>>()
     }
 
     pub fn filter(s: &str) -> Cow<'_, str> {

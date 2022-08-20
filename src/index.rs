@@ -98,13 +98,14 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
                 // filter and count terms, ignore empty strings
                 let mut filtered_terms_count = 0;
                 for term in terms {
-                    let filtered = filter(term);
+                    let filtered = filter(term.as_ref());
                     let term = filtered.as_ref().to_owned();
                     if !term.is_empty() {
                         all_terms.push(term.clone());
                         filtered_terms_count += 1;
-                        let counts = term_counts.entry(term)
-                            .or_insert(vec![0; fields_len]);
+                        let counts = term_counts
+                            .entry(term)
+                            .or_insert_with(|| vec![0; fields_len]);
                         counts[i] += 1;
                     }
                 }
@@ -448,7 +449,8 @@ fn create_inverted_index_nodes<T: Clone>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::borrow::Cow;
+
+    use crate::test_util::{filter, tokenizer};
 
     /// Count the amount of nodes of the index.
     ///
@@ -478,13 +480,6 @@ mod tests {
         text: String,
     }
 
-    fn tokenizer(s: &str) -> Vec<&str> {
-        s.split(' ').collect::<Vec<_>>()
-    }
-
-    fn filter(s: &str) -> Cow<'_, str> {
-        Cow::from(s)
-    }
     fn field_accessor(doc: &Doc) -> Option<&str> {
         Some(doc.text.as_str())
     }

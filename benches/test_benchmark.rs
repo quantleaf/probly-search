@@ -12,8 +12,9 @@ struct DocX {
 fn filter(s: &str) -> Cow<'_, str> {
     Cow::from(s)
 }
-fn tokenizer(s: &str) -> Vec<&str> {
-    s.split(' ').collect::<Vec<_>>()
+
+fn tokenizer(s: &str) -> Vec<Cow<'_, str>> {
+    s.split(' ').map(Cow::from).collect::<Vec<_>>()
 }
 
 pub fn test_speed(c: &mut Criterion) {

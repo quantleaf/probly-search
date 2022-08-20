@@ -12,9 +12,10 @@ struct Doc {
     description: String,
 }
 
-fn tokenizer(s: &str) -> Vec<&str> {
-    s.split(' ').collect::<Vec<_>>()
+fn tokenizer(s: &str) -> Vec<Cow<'_, str>> {
+    s.split(' ').map(Cow::from).collect::<Vec<_>>()
 }
+
 fn title_extract(d: &Doc) -> Option<&str> {
     Some(d.title.as_str())
 }

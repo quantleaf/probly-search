@@ -2,7 +2,7 @@ use crate::{
     index::{DocumentDetails, DocumentPointer, FieldDetails, InvertedIndexNode},
     QueryResult,
 };
-use std::{collections::HashMap, fmt::Debug};
+use std::{borrow::Cow, collections::HashMap, fmt::Debug};
 use typed_generational_arena::StandardIndex as ArenaIndex;
 
 pub struct TermData<'a> {
@@ -14,7 +14,7 @@ pub struct TermData<'a> {
     // from the current query term `query_term`
     pub query_term_expanded: &'a str,
     // All available query terms
-    pub all_query_terms: Vec<&'a str>,
+    pub all_query_terms: Vec<Cow<'a, str>>,
 }
 
 pub struct FieldData<'a> {

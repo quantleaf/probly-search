@@ -33,7 +33,7 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
     returns Array of QueryResult structs
     */
     pub fn query<M, S: ScoreCalculator<T, M>>(
-        &mut self,
+        &self,
         query: &str,
         score_calculator: &mut S,
         tokenizer: Tokenizer,
@@ -55,52 +55,49 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
                         &self.arena_index,
                     );
                     if let Some(term_node_index) = term_node_option {
-                        let document_frequency =
-                            self.disconnect_and_count_documents(term_node_index, removed);
+                        let document_frequency = 1;
                         let term_node = self.arena_index.get(term_node_index).unwrap();
                         if let Some(term_node_option_first_doc) = term_node.first_doc {
-                            if document_frequency > 0 {
-                                let term_expansion_data = TermData {
-                                    query_term_index,
-                                    all_query_terms: query_terms.clone(),
-                                    query_term,
-                                    query_term_expanded: &query_term_expanded,
-                                };
-                                let pre_calculations = &score_calculator.before_each(
-                                    &term_expansion_data,
-                                    document_frequency,
-                                    &self.docs,
-                                );
+                            let term_expansion_data = TermData {
+                                query_term_index,
+                                all_query_terms: query_terms.clone(),
+                                query_term,
+                                query_term_expanded: &query_term_expanded,
+                            };
+                            let pre_calculations = &score_calculator.before_each(
+                                &term_expansion_data,
+                                document_frequency,
+                                &self.docs,
+                            );
 
-                                let mut pointer = Some(term_node_option_first_doc);
-                                while let Some(p) = pointer {
-                                    let pointer_borrowed = self.arena_doc.get(p).unwrap();
-                                    let key = &pointer_borrowed.details_key;
-                                    if removed.is_none() || !removed.unwrap().contains(key) {
-                                        let fields = &self.fields;
-                                        let score = &score_calculator.score(
-                                            pre_calculations.as_ref(),
-                                            pointer_borrowed,
-                                            self.docs.get(key).unwrap(),
-                                            &term_node_index,
-                                            &FieldData {
-                                                fields_boost,
-                                                fields,
-                                            },
-                                            &term_expansion_data,
+                            let mut pointer = Some(term_node_option_first_doc);
+                            while let Some(p) = pointer {
+                                let pointer_borrowed = self.arena_doc.get(p).unwrap();
+                                let key = &pointer_borrowed.details_key;
+                                if removed.is_none() || !removed.unwrap().contains(key) {
+                                    let fields = &self.fields;
+                                    let score = &score_calculator.score(
+                                        pre_calculations.as_ref(),
+                                        pointer_borrowed,
+                                        self.docs.get(key).unwrap(),
+                                        &term_node_index,
+                                        &FieldData {
+                                            fields_boost,
+                                            fields,
+                                        },
+                                        &term_expansion_data,
+                                    );
+                                    if let Some(s) = score {
+                                        let new_score = max_score_merger(
+                                            s,
+                                            scores.get(key),
+                                            visited_documents_for_term.contains(key),
                                         );
-                                        if let Some(s) = score {
-                                            let new_score = max_score_merger(
-                                                s,
-                                                scores.get(key),
-                                                visited_documents_for_term.contains(key),
-                                            );
-                                            scores.insert(*key, new_score);
-                                        }
+                                        scores.insert(*key, new_score);
                                     }
-                                    visited_documents_for_term.insert(*key);
-                                    pointer = pointer_borrowed.next;
                                 }
+                                visited_documents_for_term.insert(*key);
+                                pointer = pointer_borrowed.next;
                             }
                         }
                     }
@@ -266,9 +263,10 @@ pub(crate) mod tests {
                 &[1., 1.],
                 None,
             );
+
             assert_eq!(result.len(), 2);
             assert_eq!(
-                approx_equal(result.get(0).unwrap().score, 0.1823215567939546, 8),
+                approx_equal(result.get(0).unwrap().score, 0.6931471805599453, 8),
                 true
             );
             assert_eq!(
@@ -276,7 +274,7 @@ pub(crate) mod tests {
                 true
             );
             assert_eq!(
-                approx_equal(result.get(1).unwrap().score, 0.1823215567939546, 8),
+                approx_equal(result.get(1).unwrap().score, 0.6931471805599453, 8),
                 true
             );
             assert_eq!(

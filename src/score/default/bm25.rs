@@ -127,11 +127,11 @@ mod tests {
             vec![
                 QueryResult {
                     key: 0,
-                    score: 0.1823215567939546,
+                    score: 0.6931471805599453,
                 },
                 QueryResult {
                     key: 1,
-                    score: 0.1823215567939546,
+                    score: 0.6931471805599453,
                 },
             ],
         );

@@ -285,7 +285,13 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
         let mut pointer_option = node.first_doc;
         let mut document_frequency = 0;
         while let Some(pointer) = pointer_option {
-            document_frequency += 1;
+            let is_removed = match &self.removed {
+                Some(set) => set.contains(&self.arena_doc.get(pointer).unwrap().details_key),
+                None => false,
+            };
+            if !is_removed {
+                document_frequency += 1;
+            }
             pointer_option = self.arena_doc.get(pointer).unwrap().next;
         }
         document_frequency

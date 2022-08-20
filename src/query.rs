@@ -17,21 +17,9 @@ pub struct QueryResult<T> {
 }
 
 impl<T: Eq + Hash + Copy + Debug> Index<T> {
-    /**
-    Performs a search with a simple free text query.
-    All token separators work as a disjunction operator.
-    Arguments
-     * typeparam `T` Document key.
-     * `index`.
-     * `query` Query string.
-     * `score_calculator` A struct that implements the ScoreCalculator trait to provide score calculations.
-     * `tokenizer Tokenizer is a function that breaks a text into words, phrases, symbols, or other meaningful elements called tokens.
-     * `filter` Filter is a function that processes tokens and returns terms, terms are used in Inverted Index to index documents.
-     * `fields_boost` Fields boost factors.
-     * `remove`d Set of removed document keys.
-
-    returns Array of QueryResult structs
-    */
+    /// Performs a search with a simple free text query.
+    ///
+    /// All token separators work as a disjunction operator.
     pub fn query<M, S: ScoreCalculator<T, M>>(
         &self,
         query: &str,
@@ -39,7 +27,6 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
         tokenizer: Tokenizer,
         filter: Filter,
         fields_boost: &[f64],
-        //removed: Option<&HashSet<T>>,
     ) -> Vec<QueryResult<T>> {
         let removed = self.removed_documents();
         let query_terms = tokenizer(query);
@@ -56,7 +43,7 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
                         &self.arena_index,
                     );
                     if let Some(term_node_index) = term_node_option {
-                        let document_frequency = 1;
+                        let document_frequency = self.count_documents(term_node_index);
                         let term_node = self.arena_index.get(term_node_index).unwrap();
                         if let Some(term_node_option_first_doc) = term_node.first_doc {
                             let term_expansion_data = TermData {
@@ -265,7 +252,7 @@ pub(crate) mod tests {
 
             assert_eq!(result.len(), 2);
             assert_eq!(
-                approx_equal(result.get(0).unwrap().score, 0.6931471805599453, 8),
+                approx_equal(result.get(0).unwrap().score, 0.1823215567939546, 8),
                 true
             );
             assert_eq!(
@@ -273,7 +260,7 @@ pub(crate) mod tests {
                 true
             );
             assert_eq!(
-                approx_equal(result.get(1).unwrap().score, 0.6931471805599453, 8),
+                approx_equal(result.get(1).unwrap().score, 0.1823215567939546, 8),
                 true
             );
             assert_eq!(

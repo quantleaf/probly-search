@@ -285,6 +285,18 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
         document_frequency
     }
 
+    /// Count the document frequency.
+    pub(crate) fn count_documents(&self, node_index: ArenaIndex<InvertedIndexNode<T>>) -> usize {
+        let node = self.arena_index.get(node_index).unwrap();
+        let mut pointer_option = node.first_doc;
+        let mut document_frequency = 0;
+        while let Some(pointer) = pointer_option {
+            document_frequency += 1;
+            pointer_option = self.arena_doc.get(pointer).unwrap().next;
+        }
+        document_frequency
+    }
+
     /// Finds inverted index node that matches the `term`.
     pub(crate) fn find_inverted_index_node(
         node: ArenaIndex<InvertedIndexNode<T>>,

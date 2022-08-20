@@ -1,9 +1,9 @@
 [package]
 name = "probly-search"
 description = "A lightweight full-text search engine with a fully customizable scoring function"
-version = "2.0.0-alpha-1"
+version = "2.0.0-alpha-2"
 authors = ["marcus-pousette <marcus.pousette@quantleaf.com>"]
-edition = "2018"
+edition = "2021"
 license = "MIT"
 homepage = "https://github.com/quantleaf/probly-search"
 repository = "https://github.com/quantleaf/probly-search"
@@ -28,9 +28,6 @@ crate-type = ["cdylib", "rlib"]
 name = "test_benchmark"
 harness = false
 
-
 [profile.dev]
 opt-level = 0
 debug = true
-
-

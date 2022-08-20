@@ -5,7 +5,7 @@ use std::{
     
 };
 
-use std::collections::{HashMap, HashSet};
+use hashbrown::{HashMap, HashSet};
 use crate::{FieldAccessor, Tokenizer};
 extern crate typed_generational_arena;
 use typed_generational_arena::StandardArena;

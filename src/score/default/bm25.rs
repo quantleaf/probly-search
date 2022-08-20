@@ -3,7 +3,7 @@
 */
 
 use std::{fmt::Debug};
-use std::collections::{HashMap};
+use hashbrown::{HashMap};
 
 use crate::{
     index::{DocumentDetails, DocumentPointer, InvertedIndexNode},

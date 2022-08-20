@@ -4,7 +4,7 @@ use crate::{
 };
 use std::{ fmt::Debug};
 use typed_generational_arena::StandardIndex as ArenaIndex;
-use std::collections::HashMap;
+use hashbrown::HashMap;
 
 pub struct TermData<'a> {
     // Current query term index.

@@ -2,7 +2,7 @@ use std::{
     fmt::Debug,
     hash::Hash,
 };
-use std::collections::{HashMap, HashSet};
+use hashbrown::{HashMap, HashSet};
 
 use typed_generational_arena::StandardArena;
 

@@ -13,9 +13,6 @@ pub type FieldAccessor<D> = fn(&D) -> Option<&str>;
 /// Function used to tokenize a field.
 pub type Tokenizer = fn(&str) -> Vec<Cow<'_, str>>;
 
-/// Function used to filter fields.
-pub type Filter = fn(&str) -> Cow<'_, str>;
-
 #[cfg(test)]
 pub mod test_util {
 
@@ -42,12 +39,8 @@ pub mod test_util {
         Some(d.text.as_str())
     }
 
-    pub fn tokenizer(s: &str) -> Vec<Cow<'_, str>> {
+    pub fn tokenizer(s: &str) -> Vec<Cow<str>> {
         s.split(' ').map(Cow::from).collect::<Vec<_>>()
-    }
-
-    pub fn filter(s: &str) -> Cow<'_, str> {
-        Cow::from(s)
     }
 
     pub fn test_score<'arena, M, S: ScoreCalculator<usize, M>>(
@@ -57,13 +50,7 @@ pub mod test_util {
         expected: Vec<QueryResult<usize>>,
     ) {
         let fields_len = idx.fields.len();
-        let mut results = idx.query(
-            q,
-            score_calculator,
-            tokenizer,
-            filter,
-            &vec![1.; fields_len],
-        );
+        let mut results = idx.query(q, score_calculator, tokenizer, &vec![1.; fields_len]);
         results.sort_by(|a, b| {
             let mut sort = b.score.partial_cmp(&a.score).unwrap();
             sort = sort.then_with(|| a.key.partial_cmp(&b.key).unwrap());
@@ -90,7 +77,7 @@ pub mod test_util {
                 title: title.to_string(),
                 text: String::new(),
             };
-            index.add_document(&[title_extract], tokenizer, filter, doc.id, &doc);
+            index.add_document(&[title_extract], tokenizer, doc.id, &doc);
         }
         index
     }

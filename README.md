@@ -64,11 +64,6 @@ fn description_extract(d: &Doc) -> Option<&str> {
     Some(d.description.as_str())
 }
 
-// A no-op filter
-fn filter(s: &str) -> &str {
-   s
-}
-
 // Create index with 2 fields
 let mut index = Index::<usize>::new(2);
 

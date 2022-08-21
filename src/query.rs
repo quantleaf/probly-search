@@ -1,11 +1,9 @@
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::Debug,
-    hash::Hash,
-};
+use hashbrown::{HashMap, HashSet};
+use std::{fmt::Debug, hash::Hash};
+
 use typed_generational_arena::StandardArena;
 
-use crate::{score::*, Filter, Index, InvertedIndexNode, Tokenizer};
+use crate::{score::*, Index, InvertedIndexNode, Tokenizer};
 
 /// Result type for querying an index.
 #[derive(Debug, PartialEq)]
@@ -20,23 +18,23 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
     /// Performs a search with a simple free text query.
     ///
     /// All token separators work as a disjunction operator.
-    pub fn query<M, S: ScoreCalculator<T, M>>(
+    pub fn query<'a, M, S: ScoreCalculator<T, M>>(
         &self,
-        query: &str,
+        query: &'a str,
         score_calculator: &mut S,
         tokenizer: Tokenizer,
-        filter: Filter,
         fields_boost: &[f64],
     ) -> Vec<QueryResult<T>> {
         let removed = self.removed_documents();
-        let query_terms = tokenizer(query);
+        let query_terms = tokenizer(query); /* .iter().map(|term| term.to_string()).collect() */
+
         let mut scores = HashMap::new();
-        for (query_term_index, query_term_pre_filter) in query_terms.iter().enumerate() {
-            let query_term = filter(query_term_pre_filter);
-            let query_term = query_term.as_ref();
+        let query_terms_len = query_terms.len();
+
+        for (query_term_index, query_term) in query_terms.iter().enumerate() {
             if !query_term.is_empty() {
                 let expanded_terms = self.expand_term(query_term.as_ref(), &self.arena_index);
-                let mut visited_documents_for_term = HashSet::new();
+                let mut visited_documents_for_term: HashSet<T> = HashSet::new();
                 for query_term_expanded in expanded_terms {
                     let term_node_option = Index::<T>::find_inverted_index_node(
                         self.root,
@@ -50,7 +48,7 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
                             if document_frequency > 0 {
                                 let term_expansion_data = TermData {
                                     query_term_index,
-                                    all_query_terms: query_terms.clone(),
+                                    query_terms_len,
                                     query_term,
                                     query_term_expanded: &query_term_expanded,
                                 };
@@ -170,7 +168,6 @@ pub(crate) mod tests {
 
     use crate::test_util::*;
     use crate::Index;
-    use std::borrow::Cow;
 
     fn approx_equal(a: f64, b: f64, dp: u8) -> bool {
         let p: f64 = 10f64.powf(-(dp as f64));
@@ -197,19 +194,12 @@ pub(crate) mod tests {
                 },
             ];
             for doc in docs {
-                index.add_document(
-                    &[title_extract, text_extract],
-                    tokenizer,
-                    filter,
-                    doc.id,
-                    &doc,
-                );
+                index.add_document(&[title_extract, text_extract], tokenizer, doc.id, &doc);
             }
             let result = index.query(
                 &"a".to_string(),
                 &mut crate::score::bm25::new(),
                 tokenizer,
-                filter,
                 &[1., 1.],
             );
             assert_eq!(result.len(), 1);
@@ -237,20 +227,13 @@ pub(crate) mod tests {
             ];
 
             for doc in docs {
-                index.add_document(
-                    &[title_extract, text_extract],
-                    tokenizer,
-                    filter,
-                    doc.id,
-                    &doc,
-                );
+                index.add_document(&[title_extract, text_extract], tokenizer, doc.id, &doc);
             }
 
             let result = index.query(
                 &"c".to_string(),
                 &mut crate::score::bm25::new(),
                 tokenizer,
-                filter,
                 &[1., 1.],
             );
 
@@ -291,20 +274,13 @@ pub(crate) mod tests {
             ];
 
             for doc in docs {
-                index.add_document(
-                    &[title_extract, text_extract],
-                    tokenizer,
-                    filter,
-                    doc.id,
-                    &doc,
-                );
+                index.add_document(&[title_extract, text_extract], tokenizer, doc.id, &doc);
             }
 
             let result = index.query(
                 &"h".to_string(),
                 &mut crate::score::bm25::new(),
                 tokenizer,
-                filter,
                 &[1., 1.],
             );
             assert_eq!(result.len(), 1);
@@ -313,48 +289,6 @@ pub(crate) mod tests {
                 true
             );
             assert_eq!(result.get(0).unwrap().key, 1);
-        }
-
-        #[test]
-        fn it_should_use_filter_for_query() {
-            let mut index = Index::<usize>::new(2);
-            let docs = vec![
-                Doc {
-                    id: 1,
-                    title: "a b c".to_string(),
-                    text: "hello world".to_string(),
-                },
-                Doc {
-                    id: 2,
-                    title: "c d e".to_string(),
-                    text: "lorem ipsum".to_string(),
-                },
-            ];
-
-            for doc in docs {
-                index.add_document(
-                    &[title_extract, text_extract],
-                    tokenizer,
-                    filter,
-                    doc.id,
-                    &doc,
-                );
-            }
-
-            fn custom_filter(s: &str) -> Cow<'_, str> {
-                if s == "a" {
-                    return Cow::from("");
-                }
-                filter(s)
-            }
-            let result = index.query(
-                &"a".to_string(),
-                &mut crate::score::bm25::new(),
-                tokenizer,
-                custom_filter,
-                &[1., 1.],
-            );
-            assert_eq!(result.len(), 0);
         }
 
         #[test]
@@ -374,20 +308,13 @@ pub(crate) mod tests {
             ];
 
             for doc in docs {
-                index.add_document(
-                    &[title_extract, text_extract],
-                    tokenizer,
-                    filter,
-                    doc.id,
-                    &doc,
-                );
+                index.add_document(&[title_extract, text_extract], tokenizer, doc.id, &doc);
             }
 
             let result = index.query(
                 &"a d".to_string(),
                 &mut crate::score::bm25::new(),
                 tokenizer,
-                filter,
                 &[1., 1.],
             );
             assert_eq!(result.len(), 2);
@@ -430,13 +357,7 @@ pub(crate) mod tests {
             ];
 
             for doc in docs {
-                index.add_document(
-                    &[title_extract, text_extract],
-                    tokenizer,
-                    filter,
-                    doc.id,
-                    &doc,
-                );
+                index.add_document(&[title_extract, text_extract], tokenizer, doc.id, &doc);
             }
             let exp = index.expand_term(&"a".to_string(), &index.arena_index);
             assert_eq!(exp, vec!["adef".to_string(), "abc".to_string()]);
@@ -459,13 +380,7 @@ pub(crate) mod tests {
             ];
 
             for doc in docs {
-                index.add_document(
-                    &[title_extract, text_extract],
-                    tokenizer,
-                    filter,
-                    doc.id,
-                    &doc,
-                );
+                index.add_document(&[title_extract, text_extract], tokenizer, doc.id, &doc);
             }
             let exp = index.expand_term(&"x".to_string(), &index.arena_index);
             assert_eq!(exp, Vec::new() as Vec<String>);

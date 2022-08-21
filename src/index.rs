@@ -1,11 +1,12 @@
 use std::{
-    collections::{HashMap, HashSet},
+    borrow::Cow,
     fmt::{Debug, Formatter},
     hash::Hash,
     usize,
 };
 
-use crate::{FieldAccessor, Filter, Tokenizer};
+use crate::{FieldAccessor, Tokenizer};
+use hashbrown::{HashMap, HashSet};
 extern crate typed_generational_arena;
 use typed_generational_arena::StandardArena;
 use typed_generational_arena::StandardIndex as ArenaIndex;
@@ -78,15 +79,15 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
         &mut self,
         field_accessors: &[FieldAccessor<D>],
         tokenizer: Tokenizer,
-        filter: Filter,
         key: T,
         doc: &D,
     ) {
         let docs = &mut self.docs;
         let fields = &mut self.fields;
         let mut field_length = vec![0; fields.len()];
-        let mut term_counts: HashMap<String, Vec<usize>> = HashMap::new();
-        let mut all_terms: Vec<String> = Vec::new();
+        let mut term_counts: HashMap<Cow<str>, Vec<usize>> = HashMap::new();
+        let mut all_terms: Vec<Cow<str>> = Vec::new();
+
         for i in 0..fields.len() {
             if let Some(field_value) = field_accessors[i](doc) {
                 let fields_len = fields.len();
@@ -98,14 +99,13 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
                 // filter and count terms, ignore empty strings
                 let mut filtered_terms_count = 0;
                 for term in terms {
-                    let filtered = filter(term.as_ref());
-                    let term = filtered.as_ref().to_owned();
                     if !term.is_empty() {
-                        all_terms.push(term.clone());
                         filtered_terms_count += 1;
+                        all_terms.push(term.clone());
                         let counts = term_counts
                             .entry(term)
                             .or_insert_with(|| vec![0; fields_len]);
+
                         counts[i] += 1;
                     }
                 }
@@ -456,7 +456,7 @@ fn create_inverted_index_nodes<T: Clone>(
 mod tests {
     use super::*;
 
-    use crate::test_util::{filter, tokenizer};
+    use crate::test_util::tokenizer;
 
     /// Count the amount of nodes of the index.
     ///
@@ -505,7 +505,7 @@ mod tests {
                 text: "a b c".to_string(),
             };
 
-            index.add_document(&field_accessors, tokenizer, filter, doc.id, &doc);
+            index.add_document(&field_accessors, tokenizer, doc.id, &doc);
 
             assert_eq!(index.docs.len(), 1);
             let (_, added_doc) = index.docs.iter().next().unwrap();
@@ -561,9 +561,9 @@ mod tests {
                 text: "b c d".to_string(),
             };
 
-            index.add_document(&field_accessors, tokenizer, filter, doc_1.id, &doc_1);
+            index.add_document(&field_accessors, tokenizer, doc_1.id, &doc_1);
 
-            index.add_document(&field_accessors, tokenizer, filter, doc_2.id, &doc_2);
+            index.add_document(&field_accessors, tokenizer, doc_2.id, &doc_2);
 
             assert_eq!(index.docs.len(), 2);
             assert_eq!(
@@ -617,7 +617,7 @@ mod tests {
                 text: "a  b".to_string(), // double space could introduce empty tokens
             };
 
-            index.add_document(&field_accessors, tokenizer, filter, doc_1.id, &doc_1);
+            index.add_document(&field_accessors, tokenizer, doc_1.id, &doc_1);
         }
     }
 
@@ -635,7 +635,7 @@ mod tests {
             }];
 
             for doc in docs {
-                index.add_document(&[field_accessor], tokenizer, filter, doc.id, &doc)
+                index.add_document(&[field_accessor], tokenizer, doc.id, &doc)
             }
 
             index.remove_document(1);
@@ -754,8 +754,8 @@ mod tests {
                     text: "abe".to_string(),
                 };
 
-                index.add_document(&field_accessors, tokenizer, filter, doc.id, &doc);
-                index.add_document(&field_accessors, tokenizer, filter, doc_2.id, &doc_2);
+                index.add_document(&field_accessors, tokenizer, doc.id, &doc);
+                index.add_document(&field_accessors, tokenizer, doc_2.id, &doc_2);
                 assert_eq!(count_nodes(&index), 5); //
             }
 
@@ -775,8 +775,8 @@ mod tests {
                     text: "ab ef".to_string(),
                 };
 
-                index.add_document(&field_accessors, tokenizer, filter, doc.id, &doc);
-                index.add_document(&field_accessors, tokenizer, filter, doc_2.id, &doc_2);
+                index.add_document(&field_accessors, tokenizer, doc.id, &doc);
+                index.add_document(&field_accessors, tokenizer, doc_2.id, &doc_2);
                 assert_eq!(count_nodes(&index), 7); //
             }
 

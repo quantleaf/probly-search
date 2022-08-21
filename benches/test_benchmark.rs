@@ -9,10 +9,6 @@ struct DocX {
     title: String,
 }
 
-fn filter(s: &str) -> Cow<'_, str> {
-    Cow::from(s)
-}
-
 fn tokenizer(s: &str) -> Vec<Cow<'_, str>> {
     s.split(' ').map(Cow::from).collect::<Vec<_>>()
 }
@@ -62,6 +58,6 @@ fn add_all_documents(
             id: i,
             title: s.to_owned(),
         };
-        index.add_document(extractor, tokenizer, filter, d.id, &d);
+        index.add_document(extractor, tokenizer, d.id, &d);
     }
 }

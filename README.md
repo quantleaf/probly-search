@@ -22,7 +22,7 @@ https://quantleaf.github.io/probly-search-demo/
   [Inverted Index](https://en.wikipedia.org/wiki/Inverted_index).
 - Multiple fields full-text indexing and searching.
 - Per-field score boosting.
-- Configurable tokenizer and term filter.
+- Configurable tokenizer.
 - Free text queries with query expansion.
 - Fast allocation, but latent deletion.
 - WASM compatible
@@ -48,8 +48,8 @@ use probly_search::{
 };
 
 // A white space tokenizer
-fn tokenizer(s: &str) -> Vec<&str> {
-     s.split(' ').collect::<Vec<_>>()
+fn tokenizer(s: &str) -> Vec<Cow<str>> {
+     s.split(' ').map(Cow::from).collect::<Vec<_>>()
 }
 
 // We have to provide extraction functions for the fields we want to index
@@ -84,7 +84,6 @@ let doc_2 = Doc {
 index.add_document(
     &[title_extract, description_extract],
     tokenizer,
-    filter,
     doc_1.id,
     &doc_1,
 );
@@ -92,7 +91,6 @@ index.add_document(
 index.add_document(
     &[title_extract, description_extract],
     tokenizer,
-    filter,
     doc_2.id,
     &doc_2,
 );
@@ -102,7 +100,6 @@ let mut result = index.query(
     &"abc",
     &mut bm25::new(),
     tokenizer,
-    filter,
     &[1., 1.],
 );
 assert_eq!(result.len(), 2);
@@ -132,7 +129,6 @@ result = index.query(
     &"abc",
     &mut bm25::new(),
     tokenizer,
-    filter,
     &[1., 1.],
 );
 assert_eq!(result.len(), 1);

@@ -80,8 +80,7 @@ impl<T: Debug> ScoreCalculator<T, BM25TermCalculations> for BM25 {
                 tf = ((self.bm25k1 + 1_f64) * tf)
                     / (self.bm25k1
                         * ((1_f64 - self.bm25b)
-                            + self.bm25b
-                                * (field_length.to_owned() as f64 / avg_field_length))
+                            + self.bm25b * (field_length.to_owned() as f64 / avg_field_length))
                         + tf);
                 score += tf
                     * pre_calculations.idf

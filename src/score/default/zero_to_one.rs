@@ -315,11 +315,11 @@ mod tests {
             title: String,
             description: String,
         }
-        fn title_extract(doc: &DocTitleDescription) -> Option<&str> {
-            Some(doc.title.as_str())
+        fn title_extract(doc: &DocTitleDescription) -> Vec<&str> {
+            vec![doc.title.as_str()]
         }
-        fn description_extract(doc: &DocTitleDescription) -> Option<&str> {
-            Some(doc.description.as_str())
+        fn description_extract(doc: &DocTitleDescription) -> Vec<&str> {
+            vec![doc.description.as_str()]
         }
 
         for (i, (title, description)) in titles.iter().zip(descriptions.iter()).enumerate() {
@@ -364,11 +364,11 @@ mod tests {
             title: String,
             description: String,
         }
-        fn title_extract(doc: &DocTitleDescription) -> Option<&str> {
-            Some(doc.title.as_str())
+        fn title_extract(doc: &DocTitleDescription) -> Vec<&str> {
+            vec![doc.title.as_str()]
         }
-        fn description_extract(doc: &DocTitleDescription) -> Option<&str> {
-            Some(doc.description.as_str())
+        fn description_extract(doc: &DocTitleDescription) -> Vec<&str> {
+            vec![doc.description.as_str()]
         }
 
         for (i, (title, description)) in titles.iter().zip(descriptions.iter()).enumerate() {

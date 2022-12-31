@@ -16,12 +16,12 @@ fn tokenizer(s: &str) -> Vec<Cow<'_, str>> {
     s.split(' ').map(Cow::from).collect::<Vec<_>>()
 }
 
-fn title_extract(d: &Doc) -> Option<&str> {
-    Some(d.title.as_str())
+fn title_extract(d: &Doc) -> Vec<&str> {
+    vec![d.title.as_str()]
 }
 
-fn description_extract(d: &Doc) -> Option<&str> {
-    Some(d.description.as_str())
+fn description_extract(d: &Doc) -> Vec<&str> {
+    vec![d.description.as_str()]
 }
 
 #[test]

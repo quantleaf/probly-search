@@ -8,7 +8,7 @@ pub use index::*;
 pub use query::QueryResult;
 
 /// Function that extracts a field value from a document.
-pub type FieldAccessor<D> = fn(&D) -> Option<&str>;
+pub type FieldAccessor<D> = fn(&D) -> Vec<&str>;
 
 /// Function used to tokenize a field.
 pub type Tokenizer = fn(&str) -> Vec<Cow<'_, str>>;
@@ -31,12 +31,12 @@ pub mod test_util {
         pub text: String,
     }
 
-    pub fn title_extract(d: &Doc) -> Option<&str> {
-        Some(d.title.as_str())
+    pub fn title_extract(d: &Doc) -> Vec<&str> {
+        vec![d.title.as_str()]
     }
 
-    pub fn text_extract(d: &Doc) -> Option<&str> {
-        Some(d.text.as_str())
+    pub fn text_extract(d: &Doc) -> Vec<&str> {
+        vec![d.text.as_str()]
     }
 
     pub fn tokenizer(s: &str) -> Vec<Cow<str>> {

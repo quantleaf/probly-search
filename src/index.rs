@@ -89,10 +89,10 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
         let mut all_terms: Vec<Cow<str>> = Vec::new();
 
         for i in 0..fields.len() {
-            if let Some(field_value) = field_accessors[i](doc) {
-                let fields_len = fields.len();
-                let mut field_details = fields.get_mut(i).unwrap();
-
+            let field_values = field_accessors[i](doc);
+            let fields_len = fields.len();
+            let mut field_details = fields.get_mut(i).unwrap();
+            for field_value in field_values {
                 // tokenize text
                 let terms = tokenizer(field_value);
 
@@ -170,7 +170,7 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
         let doc_details_option = self.docs.get(&key);
         let mut remove_key = false;
         if let Some(doc_details) = doc_details_option {
-            removed.insert((&key).to_owned());
+            removed.insert(key);
             let details = doc_details;
             remove_key = true;
             let new_len = (self.docs.len() - 1) as f64;
@@ -486,8 +486,8 @@ mod tests {
         text: String,
     }
 
-    fn field_accessor(doc: &Doc) -> Option<&str> {
-        Some(doc.text.as_str())
+    fn field_accessor(doc: &Doc) -> Vec<&str> {
+        vec![doc.text.as_str()]
     }
 
     mod add {
@@ -496,8 +496,7 @@ mod tests {
 
         #[test]
         fn it_should_add_one_document_with_three_terms<'idn>() {
-            let field_accessors: Vec<FieldAccessor<Doc>> =
-                vec![field_accessor as fn(doc: &Doc) -> Option<&str>];
+            let field_accessors: Vec<FieldAccessor<Doc>> = vec![field_accessor];
 
             let mut index = Index::<usize>::new(1);
             let doc = Doc {
@@ -548,8 +547,7 @@ mod tests {
 
         #[test]
         fn it_should_add_shared_terms() {
-            let field_accessors: Vec<FieldAccessor<Doc>> =
-                vec![field_accessor as fn(doc: &Doc) -> Option<&str>];
+            let field_accessors: Vec<FieldAccessor<Doc>> = vec![field_accessor];
 
             let mut index = Index::<usize>::new(1);
             let doc_1 = Doc {
@@ -608,8 +606,7 @@ mod tests {
 
         #[test]
         fn it_should_ignore_empty_tokens() {
-            let field_accessors: Vec<FieldAccessor<Doc>> =
-                vec![field_accessor as fn(doc: &Doc) -> Option<&str>];
+            let field_accessors: Vec<FieldAccessor<Doc>> = vec![field_accessor];
 
             let mut index = Index::<usize>::new(1);
             let doc_1 = Doc {
@@ -742,7 +739,7 @@ mod tests {
             #[test]
             fn it_should_count_nodes() {
                 let field_accessors: Vec<FieldAccessor<Doc>> =
-                    vec![field_accessor as fn(doc: &Doc) -> Option<&str>];
+                    vec![field_accessor as fn(doc: &Doc) -> Vec<&str>];
 
                 let mut index = Index::<usize>::new(1);
                 let doc = Doc {
@@ -761,8 +758,7 @@ mod tests {
 
             #[test]
             fn it_should_count_nodes_2() {
-                let field_accessors: Vec<FieldAccessor<Doc>> =
-                    vec![field_accessor as fn(doc: &Doc) -> Option<&str>];
+                let field_accessors: Vec<FieldAccessor<Doc>> = vec![field_accessor];
 
                 let mut index = Index::<usize>::new(1);
 

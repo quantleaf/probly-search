@@ -30,8 +30,8 @@ pub fn test_speed(c: &mut Criterion) {
         }
         s
     }
-    fn title_extract_x(d: &DocX) -> Option<&str> {
-        Some(d.title.as_str())
+    fn title_extract_x(d: &DocX) -> Vec<&str> {
+        vec![d.title.as_str()]
     }
 
     c.bench_function("add_100k_docs", |b| {
@@ -43,14 +43,14 @@ pub fn test_speed(c: &mut Criterion) {
             new_rand.push_str(&generate_string(0, 4));
             random_strings.push(new_rand);
         }
-        let extractor = [title_extract_x as fn(&_) -> Option<&str>];
+        let extractor = [title_extract_x as fn(&DocX) -> Vec<&str>];
         b.iter(|| add_all_documents(&mut index, &extractor, &random_strings));
     });
 }
 
 fn add_all_documents(
     index: &mut Index<usize>,
-    extractor: &[fn(&DocX) -> Option<&str>],
+    extractor: &[fn(&DocX) -> Vec<&str>],
     random_strings: &[String],
 ) {
     for (i, s) in random_strings.iter().enumerate() {

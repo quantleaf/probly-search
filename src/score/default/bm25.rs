@@ -71,7 +71,7 @@ impl<T: Debug> ScoreCalculator<T, BM25TermCalculations> for BM25 {
         let pre_calculations = &before_output.unwrap(); // it will exist as we need BM25 parameters
         let mut score: f64 = 0_f64;
         for x in 0..document_details.field_length.len() {
-            let mut tf = (&document_pointer.term_frequency[x]).to_owned() as f64;
+            let mut tf = document_pointer.term_frequency[x] as f64;
             if tf > 0_f64 {
                 // calculating BM25 tf
                 let field_length = &document_details.field_length[x];
@@ -80,8 +80,7 @@ impl<T: Debug> ScoreCalculator<T, BM25TermCalculations> for BM25 {
                 tf = ((self.bm25k1 + 1_f64) * tf)
                     / (self.bm25k1
                         * ((1_f64 - self.bm25b)
-                            + self.bm25b
-                                * (field_length.to_owned() as f64 / avg_field_length as f64))
+                            + self.bm25b * (field_length.to_owned() as f64 / avg_field_length))
                         + tf);
                 score += tf
                     * pre_calculations.idf

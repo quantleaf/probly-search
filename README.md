@@ -55,13 +55,13 @@ fn tokenizer(s: &str) -> Vec<Cow<str>> {
 // We have to provide extraction functions for the fields we want to index
 
 // Title
-fn title_extract(d: &Doc) -> Option<&str> {
-    Some(d.title.as_str())
+fn title_extract(d: &Doc) -> Vec<&str> {
+    vec![d.title.as_str()]
 }
 
 // Description
-fn description_extract(d: &Doc) -> Option<&str> {
-    Some(d.description.as_str())
+fn description_extract(d: &Doc) -> Vec<&str> {
+    vec![d.description.as_str()]
 }
 
 // Create index with 2 fields

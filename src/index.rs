@@ -91,7 +91,7 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
         for i in 0..fields.len() {
             let field_values = field_accessors[i](doc);
             let fields_len = fields.len();
-            let mut field_details = fields.get_mut(i).unwrap();
+            let field_details = fields.get_mut(i).unwrap();
             for field_value in field_values {
                 // tokenize text
                 let terms = tokenizer(field_value);

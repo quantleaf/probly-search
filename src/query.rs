@@ -18,9 +18,9 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
     /// Performs a search with a simple free text query.
     ///
     /// All token separators work as a disjunction operator.
-    pub fn query<'a, M, S: ScoreCalculator<T, M>>(
+    pub fn query<M, S: ScoreCalculator<T, M>>(
         &self,
-        query: &'a str,
+        query: &str,
         score_calculator: &mut S,
         tokenizer: Tokenizer,
         fields_boost: &[f64],

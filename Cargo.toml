@@ -15,7 +15,7 @@ exclude = [".github/**", ".gitignore", ".rustfmt.toml"]
 
 [dependencies]
 typed-generational-arena = "0.2"
-hashbrown = "0.12.3"
+hashbrown = "0.14"
 
 [dev-dependencies]
 lazy_static = "1.4.0"

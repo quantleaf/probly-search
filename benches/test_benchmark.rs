@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use probly_search::Index;
+use probly_search::{Index, Indexable, VecOrSliceCow};
 use std::borrow::Cow;
 
 criterion_group!(benches, test_speed);
@@ -9,7 +9,16 @@ struct DocX {
     title: String,
 }
 
-fn tokenizer(s: &str) -> Vec<Cow<'_, str>> {
+impl Indexable<usize> for DocX {
+    fn key(&self) -> usize {
+        self.id
+    }
+
+    fn fields(&self) -> VecOrSliceCow {
+        VecOrSliceCow::Slice(Box::new([Cow::from(self.title.as_str())]))
+    }
+}
+fn tokenizer(s: &str) -> Vec<Cow<str>> {
     s.split(' ').map(Cow::from).collect::<Vec<_>>()
 }
 
@@ -30,9 +39,6 @@ pub fn test_speed(c: &mut Criterion) {
         }
         s
     }
-    fn title_extract_x(d: &DocX) -> Option<&str> {
-        Some(d.title.as_str())
-    }
 
     c.bench_function("add_100k_docs", |b| {
         let mut index = Index::<usize>::new_with_capacity(1, 100000, 100000);
@@ -43,21 +49,16 @@ pub fn test_speed(c: &mut Criterion) {
             new_rand.push_str(&generate_string(0, 4));
             random_strings.push(new_rand);
         }
-        let extractor = [title_extract_x as fn(&_) -> Option<&str>];
-        b.iter(|| add_all_documents(&mut index, &extractor, &random_strings));
+        b.iter(|| add_all_documents(&mut index, &random_strings));
     });
 }
 
-fn add_all_documents(
-    index: &mut Index<usize>,
-    extractor: &[fn(&DocX) -> Option<&str>],
-    random_strings: &[String],
-) {
+fn add_all_documents(index: &mut Index<usize>, random_strings: &[String]) {
     for (i, s) in random_strings.iter().enumerate() {
         let d = DocX {
             id: i,
             title: s.to_owned(),
         };
-        index.add_document(extractor, tokenizer, d.id, &d);
+        index.add_document(&d, tokenizer);
     }
 }

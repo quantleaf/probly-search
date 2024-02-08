@@ -5,10 +5,10 @@ use std::{
     usize,
 };
 
-use crate::{FieldAccessor, Tokenizer};
+use crate::{Tokenizer};
 use hashbrown::{HashMap, HashSet};
 extern crate typed_generational_arena;
-use typed_generational_arena::StandardArena;
+use typed_generational_arena::StandardArena as Arena;
 use typed_generational_arena::StandardIndex as ArenaIndex;
 
 /// Index data structure.
@@ -25,18 +25,29 @@ pub struct Index<T> {
     /// Additional information about indexed fields in all documents.
     pub(crate) fields: Vec<FieldDetails>,
 
-    pub(crate) arena_index: StandardArena<InvertedIndexNode<T>>,
-    pub(crate) arena_doc: StandardArena<DocumentPointer<T>>,
+    pub(crate) arena_index: Arena<InvertedIndexNode<T>>,
+    pub(crate) arena_doc: Arena<DocumentPointer<T>>,
 
     /// Documents that have been removed from the index but
     /// need to be purged.
     removed: Option<HashSet<T>>,
 }
 
-impl<T: Eq + Hash + Copy + Debug> Index<T> {
+
+enum FieldIterator<T>
+{
+    Slice(Box<[T]>),
+    Vec(Vec<T>)
+}
+pub trait Indexable<T> {
+    fn key(& self) -> T;
+    fn fields(& self) -> FieldIterator<Cow<str>>;
+}
+
+impl<'a, T: Eq + Hash + Copy + Debug> Index<T> {
     /// Creates an index.
     pub fn new(fields_num: usize) -> Self {
-        Self::new_with_capacity(fields_num, 1000, 10000)
+        Self::new_with_capacity(fields_num, 10000, 10000)
     }
 
     /// Creates an index with the expected capacity.
@@ -46,13 +57,13 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
         expected_documents_count: usize,
     ) -> Self {
         let fields: Vec<FieldDetails> = vec![FieldDetails { sum: 0, avg: 0_f64 }; fields_num];
-        let mut arena_index = StandardArena::new();
+        let mut arena_index = Arena::new();
         arena_index.reserve(expected_index_size);
-        let mut arena_doc = StandardArena::new();
+        let mut arena_doc = Arena::new();
         arena_doc.reserve(expected_documents_count);
         Self {
             docs: HashMap::new(),
-            root: arena_index.insert(create_inverted_index_node(&char::from_u32(0).unwrap())),
+            root: arena_index.insert(create_inverted_index_node(char::from_u32(0).unwrap())),
             fields,
             arena_doc,
             arena_index,
@@ -75,87 +86,91 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
     }
 
     /// Adds a document to the index.
-    pub fn add_document<D>(
-        &mut self,
-        field_accessors: &[FieldAccessor<D>],
-        tokenizer: Tokenizer,
-        key: T,
-        doc: &D,
-    ) {
+    pub fn add_document<D: Indexable<T>>(&mut self, doc: &D, tokenizer: Tokenizer) {
         let docs = &mut self.docs;
         let fields = &mut self.fields;
-        let mut field_length = vec![0; fields.len()];
+        let fields_len = fields.len();
+        let mut field_term_counter = vec![0; fields_len];
+        let values = doc.fields();
         let mut term_counts: HashMap<Cow<str>, Vec<usize>> = HashMap::new();
-        let mut all_terms: Vec<Cow<str>> = Vec::new();
+        let docs_len_plus_1 = docs.len() as f64 + 1_f64;
 
-        for i in 0..fields.len() {
-            if let Some(field_value) = field_accessors[i](doc) {
-                let fields_len = fields.len();
-                let mut field_details = fields.get_mut(i).unwrap();
-
-                // tokenize text
-                let terms = tokenizer(field_value);
-
-                // filter and count terms, ignore empty strings
-                let mut filtered_terms_count = 0;
-                for term in terms {
-                    if !term.is_empty() {
-                        filtered_terms_count += 1;
-                        all_terms.push(term.clone());
-                        let counts = term_counts
-                            .entry(term)
-                            .or_insert_with(|| vec![0; fields_len]);
-
-                        counts[i] += 1;
-                    }
-                }
-
-                field_details.sum += filtered_terms_count;
-                field_details.avg = field_details.sum as f64 / (docs.len() as f64 + 1_f64);
-                field_length[i] = filtered_terms_count;
-            }
+        match &values
+        {
+            FieldIterator::Slice(s) => s.iter(),
+            FieldIterator::Vec(v) => v.iter()
         }
+            .map(|value| tokenizer(value))
+            .zip(fields)
+            .enumerate()
+            .for_each(|(i, (tokens, field_details))| {
+                field_details.sum += tokens.len();
+                field_term_counter[i] = tokens.len();
+                field_details.avg = field_details.sum as f64 / docs_len_plus_1;
+                tokens.into_iter().for_each(|term | {
+                    match term_counts.get_mut(&term) {
+                        Some(counts) => {
+                            counts[i] += 1;
+                        }
+                        None => {
+                            let mut to_insert = vec![0; fields_len];
+                            to_insert[i] += 1;
+                            term_counts.insert(term, to_insert);
+                        }
+                    };
+                });
+            });
 
-        docs.insert(key, DocumentDetails { key, field_length });
-        for term in all_terms {
+        let key = doc.key();
+
+        docs.insert(
+            key,
+            DocumentDetails {
+                key,
+                field_length: field_term_counter,
+            },
+        );
+
+        term_counts.into_iter().for_each(|(term, count)| {
             let mut node_index = self.root;
-            for (i, char) in term.chars().enumerate() {
-                let node = self.arena_index.get(node_index).unwrap();
-                if node.first_child.is_none() {
-                    node_index =
-                        create_inverted_index_nodes(&mut self.arena_index, node_index, &term, &i);
-                    break;
-                }
-                let next_node = Index::<T>::find_inverted_index_node_child_nodes_by_char(
-                    node,
-                    &char,
-                    &self.arena_index,
-                );
-                match next_node {
-                    None => {
-                        node_index = create_inverted_index_nodes(
-                            &mut self.arena_index,
-                            node_index,
-                            &term,
-                            &i,
+            let mut build_tree = false;
+            
+            term.chars().for_each(|char| {
+                if !build_tree { 
+                    let node = self.arena_index.get(node_index).unwrap();
+                    if node.first_child.is_none() {
+                        build_tree = true;
+                    }
+                    else {
+                        let next_node = Index::<T>::find_inverted_index_node_child_nodes_by_char(
+                            node,
+                            &char,
+                            &self.arena_index,
                         );
-                        break;
-                    }
-                    Some(n) => {
-                        node_index = n;
+                        match next_node {
+                            None => {
+                                build_tree = true;
+                                
+                            }
+                            Some(n) => {
+                                node_index = n;
+                                return;
+                            }
+                        }
                     }
                 }
-            }
+                node_index = create_inverted_index_nodes(&mut self.arena_index, node_index, char);
+            });
             add_inverted_index_doc(
                 self.arena_index.get_mut(node_index).unwrap(),
                 DocumentPointer {
                     next: None,
-                    details_key: key.to_owned(),
-                    term_frequency: term_counts[&term].to_owned(),
+                    details_key: key,
+                    term_frequency: count,
                 },
                 &mut self.arena_doc,
             )
-        }
+        });
     }
 
     /// Remove document from the index.
@@ -301,7 +316,7 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
     pub(crate) fn find_inverted_index_node(
         node: ArenaIndex<InvertedIndexNode<T>>,
         term: &str,
-        index_arena: &StandardArena<InvertedIndexNode<T>>,
+        index_arena: &Arena<InvertedIndexNode<T>>,
     ) -> Option<ArenaIndex<InvertedIndexNode<T>>> {
         let mut node_iteration = Some(node);
         for char in term.chars() {
@@ -322,7 +337,7 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
     pub(crate) fn find_inverted_index_node_child_nodes_by_char(
         from_node: &InvertedIndexNode<T>,
         char: &char,
-        index_arena: &StandardArena<InvertedIndexNode<T>>,
+        index_arena: &Arena<InvertedIndexNode<T>>,
     ) -> Option<ArenaIndex<InvertedIndexNode<T>>> {
         let child = from_node.first_child;
         let mut iter = child;
@@ -380,7 +395,7 @@ impl<T> PartialEq for InvertedIndexNode<T> {
 }
 
 impl<T> Debug for InvertedIndexNode<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
         f.debug_struct("InvertedIndexNode")
             .field("char", &self.char)
             .finish()
@@ -397,9 +412,9 @@ pub struct FieldDetails {
 }
 
 /// Creates inverted index node.
-fn create_inverted_index_node<T>(char: &char) -> InvertedIndexNode<T> {
+fn create_inverted_index_node<T>(char: char) -> InvertedIndexNode<T> {
     InvertedIndexNode {
-        char: char.to_owned(),
+        char,
         next: None,
         first_child: None,
         first_doc: None,
@@ -410,7 +425,7 @@ fn create_inverted_index_node<T>(char: &char) -> InvertedIndexNode<T> {
 fn add_inverted_index_child_node<T: Clone>(
     parent_index: ArenaIndex<InvertedIndexNode<T>>,
     child: ArenaIndex<InvertedIndexNode<T>>,
-    index_arena: &mut StandardArena<InvertedIndexNode<T>>,
+    index_arena: &mut Arena<InvertedIndexNode<T>>,
 ) {
     let parent = index_arena.get_mut(parent_index).unwrap();
     if let Some(first) = parent.first_child {
@@ -423,37 +438,31 @@ fn add_inverted_index_child_node<T: Clone>(
 fn add_inverted_index_doc<T: Clone>(
     node: &mut InvertedIndexNode<T>,
     mut doc: DocumentPointer<T>,
-    arena_doc: &mut StandardArena<DocumentPointer<T>>,
+    arena_doc: &mut Arena<DocumentPointer<T>>,
 ) {
-    let node_value = node;
-    if let Some(first) = node_value.first_doc {
+    if let Some(first) = node.first_doc {
         doc.next = Some(first);
     }
     let doc_index = arena_doc.insert(doc);
-    node_value.first_doc = Some(doc_index);
+    node.first_doc = Some(doc_index);
 }
 
 /// Creates inverted index nodes for the `term` starting
 /// from the `start` character.
 fn create_inverted_index_nodes<T: Clone>(
-    arena_index: &mut StandardArena<InvertedIndexNode<T>>,
-    mut parent: ArenaIndex<InvertedIndexNode<T>>,
-    term: &str,
-    start: &usize,
+    arena_index: &mut Arena<InvertedIndexNode<T>>,
+    parent: ArenaIndex<InvertedIndexNode<T>>,
+    char: char,
 ) -> ArenaIndex<InvertedIndexNode<T>> {
-    for char in term.chars().skip(start.to_owned()) {
-        let new_node = arena_index.insert(create_inverted_index_node(&char));
-        let new_parent = {
-            add_inverted_index_child_node(parent, new_node, arena_index);
-            arena_index.get(parent).unwrap().first_child
-        };
-        parent = new_parent.unwrap();
-    }
-    parent
+    let new_node = arena_index.insert(create_inverted_index_node(char));
+    add_inverted_index_child_node(parent, new_node, arena_index);
+    new_node
 }
 
 #[cfg(test)]
 mod tests {
+    use std::slice::Iter;
+
     use super::*;
 
     use crate::test_util::tokenizer;
@@ -486,26 +495,28 @@ mod tests {
         text: String,
     }
 
-    fn field_accessor(doc: &Doc) -> Option<&str> {
-        Some(doc.text.as_str())
+    impl <'a> Indexable<'a, usize, Iter<'a, Cow<'a, str>>> for Doc {
+        fn key(&self) -> usize {
+            self.id
+        }
+        fn fields(&'a self) -> Iter<'a, Cow<'a, str>>  {
+            vec![Cow::from(self.text)].iter()
+        }
     }
-
     mod add {
 
         use super::*;
 
         #[test]
         fn it_should_add_one_document_with_three_terms<'idn>() {
-            let field_accessors: Vec<FieldAccessor<Doc>> =
-                vec![field_accessor as fn(doc: &Doc) -> Option<&str>];
-
             let mut index = Index::<usize>::new(1);
             let doc = Doc {
                 id: 1,
                 text: "a b c".to_string(),
             };
+          
 
-            index.add_document(&field_accessors, tokenizer, doc.id, &doc);
+            index.add_document(&doc, tokenizer);
 
             assert_eq!(index.docs.len(), 1);
             let (_, added_doc) = index.docs.iter().next().unwrap();
@@ -548,9 +559,6 @@ mod tests {
 
         #[test]
         fn it_should_add_shared_terms() {
-            let field_accessors: Vec<FieldAccessor<Doc>> =
-                vec![field_accessor as fn(doc: &Doc) -> Option<&str>];
-
             let mut index = Index::<usize>::new(1);
             let doc_1 = Doc {
                 id: 1,
@@ -561,9 +569,9 @@ mod tests {
                 text: "b c d".to_string(),
             };
 
-            index.add_document(&field_accessors, tokenizer, doc_1.id, &doc_1);
+            index.add_document(&doc_1, tokenizer);
 
-            index.add_document(&field_accessors, tokenizer, doc_2.id, &doc_2);
+            index.add_document(&doc_2, tokenizer);
 
             assert_eq!(index.docs.len(), 2);
             assert_eq!(
@@ -608,16 +616,13 @@ mod tests {
 
         #[test]
         fn it_should_ignore_empty_tokens() {
-            let field_accessors: Vec<FieldAccessor<Doc>> =
-                vec![field_accessor as fn(doc: &Doc) -> Option<&str>];
-
             let mut index = Index::<usize>::new(1);
             let doc_1 = Doc {
                 id: 1,
                 text: "a  b".to_string(), // double space could introduce empty tokens
             };
 
-            index.add_document(&field_accessors, tokenizer, doc_1.id, &doc_1);
+            index.add_document(&doc_1, tokenizer);
         }
     }
 
@@ -635,7 +640,7 @@ mod tests {
             }];
 
             for doc in docs {
-                index.add_document(&[field_accessor], tokenizer, doc.id, &doc)
+                index.add_document(&doc, tokenizer)
             }
 
             index.remove_document(1);
@@ -666,10 +671,10 @@ mod tests {
         use super::*;
 
         fn create(
-            arena_index: &mut StandardArena<InvertedIndexNode<usize>>,
+            arena_index: &mut Arena<InvertedIndexNode<usize>>,
             char: char,
         ) -> ArenaIndex<InvertedIndexNode<usize>> {
-            let node: InvertedIndexNode<usize> = create_inverted_index_node(&char);
+            let node: InvertedIndexNode<usize> = create_inverted_index_node(char);
             arena_index.insert(node)
         }
 
@@ -741,9 +746,6 @@ mod tests {
 
             #[test]
             fn it_should_count_nodes() {
-                let field_accessors: Vec<FieldAccessor<Doc>> =
-                    vec![field_accessor as fn(doc: &Doc) -> Option<&str>];
-
                 let mut index = Index::<usize>::new(1);
                 let doc = Doc {
                     id: 1,
@@ -754,16 +756,13 @@ mod tests {
                     text: "abe".to_string(),
                 };
 
-                index.add_document(&field_accessors, tokenizer, doc.id, &doc);
-                index.add_document(&field_accessors, tokenizer, doc_2.id, &doc_2);
+                index.add_document(&doc, tokenizer);
+                index.add_document(&doc_2, tokenizer);
                 assert_eq!(count_nodes(&index), 5); //
             }
 
             #[test]
             fn it_should_count_nodes_2() {
-                let field_accessors: Vec<FieldAccessor<Doc>> =
-                    vec![field_accessor as fn(doc: &Doc) -> Option<&str>];
-
                 let mut index = Index::<usize>::new(1);
 
                 let doc = Doc {
@@ -775,8 +774,8 @@ mod tests {
                     text: "ab ef".to_string(),
                 };
 
-                index.add_document(&field_accessors, tokenizer, doc.id, &doc);
-                index.add_document(&field_accessors, tokenizer, doc_2.id, &doc_2);
+                index.add_document(&doc, tokenizer);
+                index.add_document(&doc_2, tokenizer);
                 assert_eq!(count_nodes(&index), 7); //
             }
 

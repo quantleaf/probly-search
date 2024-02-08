@@ -1,7 +1,7 @@
 use hashbrown::{HashMap, HashSet};
 use std::{fmt::Debug, hash::Hash};
 
-use typed_generational_arena::StandardArena;
+use typed_generational_arena::StandardArena as Arena;
 
 use crate::{score::*, Index, InvertedIndexNode, Tokenizer};
 
@@ -18,9 +18,9 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
     /// Performs a search with a simple free text query.
     ///
     /// All token separators work as a disjunction operator.
-    pub fn query<'a, M, S: ScoreCalculator<T, M>>(
+    pub fn query<M, S: ScoreCalculator<T, M>>(
         &self,
-        query: &'a str,
+        query: &str,
         score_calculator: &mut S,
         tokenizer: Tokenizer,
         fields_boost: &[f64],
@@ -106,11 +106,7 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
     }
 
     /// Expands term with all possible combinations.
-    fn expand_term(
-        &self,
-        term: &str,
-        arena_index: &StandardArena<InvertedIndexNode<T>>,
-    ) -> Vec<String> {
+    fn expand_term(&self, term: &str, arena_index: &Arena<InvertedIndexNode<T>>) -> Vec<String> {
         let node = Index::<T>::find_inverted_index_node(self.root, term, &self.arena_index);
         let mut results = Vec::new();
         if let Some(n) = node {
@@ -131,7 +127,7 @@ impl<T: Eq + Hash + Copy + Debug> Index<T> {
         node: &InvertedIndexNode<T>,
         results: &mut Vec<String>,
         term: &str,
-        arena_index: &StandardArena<InvertedIndexNode<T>>,
+        arena_index: &Arena<InvertedIndexNode<T>>,
     ) {
         if node.first_doc.is_some() {
             results.push(term.to_owned());
@@ -194,7 +190,7 @@ pub(crate) mod tests {
                 },
             ];
             for doc in docs {
-                index.add_document(&[title_extract, text_extract], tokenizer, doc.id, &doc);
+                index.add_document(&doc, tokenizer);
             }
             let result = index.query(
                 &"a".to_string(),
@@ -227,7 +223,7 @@ pub(crate) mod tests {
             ];
 
             for doc in docs {
-                index.add_document(&[title_extract, text_extract], tokenizer, doc.id, &doc);
+                index.add_document(&doc, tokenizer);
             }
 
             let result = index.query(
@@ -274,7 +270,7 @@ pub(crate) mod tests {
             ];
 
             for doc in docs {
-                index.add_document(&[title_extract, text_extract], tokenizer, doc.id, &doc);
+                index.add_document(&doc, tokenizer);
             }
 
             let result = index.query(
@@ -308,7 +304,7 @@ pub(crate) mod tests {
             ];
 
             for doc in docs {
-                index.add_document(&[title_extract, text_extract], tokenizer, doc.id, &doc);
+                index.add_document(&doc, tokenizer);
             }
 
             let result = index.query(
@@ -357,7 +353,7 @@ pub(crate) mod tests {
             ];
 
             for doc in docs {
-                index.add_document(&[title_extract, text_extract], tokenizer, doc.id, &doc);
+                index.add_document(&doc, tokenizer);
             }
             let exp = index.expand_term(&"a".to_string(), &index.arena_index);
             assert_eq!(exp, vec!["adef".to_string(), "abc".to_string()]);
@@ -380,7 +376,7 @@ pub(crate) mod tests {
             ];
 
             for doc in docs {
-                index.add_document(&[title_extract, text_extract], tokenizer, doc.id, &doc);
+                index.add_document(&doc, tokenizer);
             }
             let exp = index.expand_term(&"x".to_string(), &index.arena_index);
             assert_eq!(exp, Vec::new() as Vec<String>);

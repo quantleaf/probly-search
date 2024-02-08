@@ -7,17 +7,15 @@ pub mod score;
 pub use index::*;
 pub use query::QueryResult;
 
-/// Function that extracts a field value from a document.
-pub type FieldAccessor<D> = fn(&D) -> Option<&str>;
-
 /// Function used to tokenize a field.
-pub type Tokenizer = fn(&str) -> Vec<Cow<'_, str>>;
+pub type Tokenizer = fn(&str) -> Vec<Cow<str>>;
+
 
 #[cfg(test)]
 pub mod test_util {
 
-    use crate::{score::ScoreCalculator, Index, QueryResult};
-    use std::borrow::Cow;
+    use crate::{score::ScoreCalculator, Index, Indexable, QueryResult};
+    use std::{borrow::Cow, slice::Iter};
 
     fn approx_equal(a: f64, b: f64, dp: u8) -> bool {
         let p: f64 = 10f64.powf(-(dp as f64));
@@ -30,6 +28,18 @@ pub mod test_util {
         pub title: String,
         pub text: String,
     }
+    impl<'a> Indexable<'a,  usize,  Iter<'a, Cow<'a, str>>> for Doc {
+        fn key(&self) -> usize {
+            self.id
+        }
+
+        fn fields(&'a self) -> Iter<'a, Cow<'a, str>>  {
+            return [
+                Cow::from(self.title.as_str()),
+                Cow::from(self.text.as_str()),
+            ].iter();
+        }
+    }
 
     pub fn title_extract(d: &Doc) -> Option<&str> {
         Some(d.title.as_str())
@@ -39,7 +49,7 @@ pub mod test_util {
         Some(d.text.as_str())
     }
 
-    pub fn tokenizer(s: &str) -> Vec<Cow<str>> {
+    pub fn tokenizer<'a>(s: &'a str) -> Vec<Cow<'a, str>> {
         s.split(' ').map(Cow::from).collect::<Vec<_>>()
     }
 
@@ -77,7 +87,7 @@ pub mod test_util {
                 title: title.to_string(),
                 text: String::new(),
             };
-            index.add_document(&[title_extract], tokenizer, doc.id, &doc);
+            index.add_document(&doc, tokenizer);
         }
         index
     }

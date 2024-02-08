@@ -129,11 +129,32 @@ impl<T: Debug + Eq + Hash + Clone> ScoreCalculator<T, ZeroToOneBeforeCalculation
 #[cfg(test)]
 mod tests {
 
+    use std::{borrow::Cow, slice::Iter};
+
     use super::*;
     use crate::{
         index::Index,
         test_util::{build_test_index, test_score, tokenizer},
+        Indexable,
     };
+
+    struct DocTitleDescription {
+        id: usize,
+        title: String,
+        description: String,
+    }
+
+    impl <'a> Indexable<'a, usize, Iter<'a, Cow<'a, str>>>  for DocTitleDescription {
+        fn key(&self) -> usize {
+            self.id
+        }
+        fn fields(&'a self) -> [Cow<'a, str>; 2] {
+            return [
+                Cow::from(self.title.as_str()),
+                Cow::from(self.description.as_str()),
+            ];
+        }
+    }
 
     #[test]
     fn it_should_perform_partial_matching() {
@@ -310,17 +331,6 @@ mod tests {
         let mut x = Index::<usize>::new(2);
         let titles = &["abc", "abcefg", "abcefghij"];
         let descriptions = &["abc", "abcefg", "abcefghij"];
-        struct DocTitleDescription {
-            id: usize,
-            title: String,
-            description: String,
-        }
-        fn title_extract(doc: &DocTitleDescription) -> Option<&str> {
-            Some(doc.title.as_str())
-        }
-        fn description_extract(doc: &DocTitleDescription) -> Option<&str> {
-            Some(doc.description.as_str())
-        }
 
         for (i, (title, description)) in titles.iter().zip(descriptions.iter()).enumerate() {
             let doc = DocTitleDescription {
@@ -328,12 +338,7 @@ mod tests {
                 title: title.to_string(),
                 description: description.to_string(),
             };
-            x.add_document(
-                &[title_extract, description_extract],
-                tokenizer,
-                doc.id,
-                &doc,
-            );
+            x.add_document(&doc, tokenizer);
         }
 
         test_score(
@@ -359,11 +364,7 @@ mod tests {
         let mut x = Index::<usize>::new(2);
         let titles = &["abc", "abcefg", "abcefghij"];
         let descriptions = &["a", "a", "a"];
-        struct DocTitleDescription {
-            id: usize,
-            title: String,
-            description: String,
-        }
+
         fn title_extract(doc: &DocTitleDescription) -> Option<&str> {
             Some(doc.title.as_str())
         }
@@ -377,12 +378,7 @@ mod tests {
                 title: title.to_string(),
                 description: description.to_string(),
             };
-            x.add_document(
-                &[title_extract, description_extract],
-                tokenizer,
-                doc.id,
-                &doc,
-            );
+            x.add_document(&doc, tokenizer);
         }
 
         test_score(

@@ -2,7 +2,7 @@ use std::{borrow::Cow, sync::Mutex};
 
 use probly_search::{
     score::{bm25, zero_to_one},
-    Index, QueryResult,
+    Index, Indexable, QueryResult, VecOrSliceCow,
 };
 
 #[derive(Clone)]
@@ -12,7 +12,7 @@ struct Doc {
     description: String,
 }
 
-fn tokenizer(s: &str) -> Vec<Cow<'_, str>> {
+fn tokenizer(s: &str) -> Vec<Cow<str>> {
     s.split(' ').map(Cow::from).collect::<Vec<_>>()
 }
 
@@ -42,20 +42,9 @@ pub fn test_add_query_delete_bm25() {
         description: "abcd".to_string(),
     };
     // Add documents to index
-    index.add_document(
-        &[title_extract, description_extract],
-        tokenizer,
-        doc_1.id,
-        &doc_1,
-    );
+    index.add_document(&doc_1, tokenizer);
 
-    index.add_document(
-        &[title_extract, description_extract],
-        tokenizer,
-        doc_2.id,
-        &doc_2,
-    );
-
+    index.add_document(&doc_2, tokenizer);
     // Search, expected 2 results
     let mut result = index.query("abc", &mut bm25::new(), tokenizer, &[1., 1.]);
     assert_eq!(result.len(), 2);
@@ -108,19 +97,9 @@ pub fn test_add_query_delete_zero_to_one() {
         description: "abcd".to_string(),
     };
 
-    index.add_document(
-        &[title_extract, description_extract],
-        tokenizer,
-        doc_1.id,
-        &doc_1,
-    );
+    index.add_document(&doc_1, tokenizer);
 
-    index.add_document(
-        &[title_extract, description_extract],
-        tokenizer,
-        doc_2.id,
-        &doc_2,
-    );
+    index.add_document(&doc_2, tokenizer);
 
     // Search, expected 2 results
     let mut result = index.query("abc", &mut zero_to_one::new(), tokenizer, &[1., 1.]);
@@ -158,11 +137,18 @@ pub fn it_is_thread_safe() {
         title: "abc".to_string(),
         description: "dfg".to_string(),
     };
+
+    impl Indexable< usize> for Doc {
+        fn key(&self) -> usize {
+            self.id
+        }
+        fn fields(&self) -> VecOrSliceCow {
+            return VecOrSliceCow::Vec(vec![
+                Cow::from(self.title.as_str()),
+                Cow::from(self.description.as_str()),
+            ]);
+        }
+    }
     let mut idx = IDX.lock().unwrap();
-    idx.add_document(
-        &[title_extract, description_extract],
-        tokenizer,
-        doc_1.id,
-        &doc_1,
-    );
+    idx.add_document(&doc_1, tokenizer);
 }

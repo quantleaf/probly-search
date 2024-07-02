@@ -53,7 +53,7 @@ impl<T: Debug> ScoreCalculator<T, BM25TermCalculations> for BM25 {
                     )
                 }
             },
-            idf: f64::ln(1_f64 + (diff as f64 + 0.5) / (document_frequency as f64 + 0.5)),
+            idf: f64::ln(1_f64 + (diff as f64 + 0.5) / (frequency as f64 + 0.5)),
         })
     }
 

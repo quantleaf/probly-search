@@ -38,6 +38,8 @@ impl<T: Debug> ScoreCalculator<T, BM25TermCalculations> for BM25 {
         document_frequency: usize,
         documents: &HashMap<T, DocumentDetails<T>>,
     ) -> Option<BM25TermCalculations> {
+        let frequency = std::cmp::min(documents.len(), document_frequency);
+        let diff = documents.len() - frequency;
         Some(BM25TermCalculations {
             expansion_boost: {
                 if term_expansion.query_term_expanded == term_expansion.query_term {
@@ -51,11 +53,7 @@ impl<T: Debug> ScoreCalculator<T, BM25TermCalculations> for BM25 {
                     )
                 }
             },
-            idf: f64::ln(
-                1_f64
-                    + ((documents.len() - document_frequency) as f64 + 0.5)
-                        / (document_frequency as f64 + 0.5),
-            ),
+            idf: f64::ln(1_f64 + (diff as f64 + 0.5) / (document_frequency as f64 + 0.5)),
         })
     }
 

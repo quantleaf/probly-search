@@ -2,7 +2,6 @@ use std::{
     borrow::Cow,
     fmt::{Debug, Formatter},
     hash::Hash,
-    usize,
 };
 
 use crate::{FieldAccessor, Tokenizer};
